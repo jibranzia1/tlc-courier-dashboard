@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="TLC Pakistan courier dashboard: pickups, courier mix, delivery speed, costs and returns. Password protected.">
+<title>TLC Pakistan couriers</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5/index.css">
+<style>
+/* Hallmark · app screen · operate · custom direction: quiet ops ledger, one data voice, couriers as the only colour */
+/* critique: dense figures stay legible at 400px; colour only encodes courier or status; no cards inside cards */
+:root {
+  --bg: #f6f7f8; --panel: #ffffff; --fg: #16181b; --muted: #5d636b; --line: #e2e5e9; --grid: #eceef1;
+  --c-qwqer: #0f766e; --c-leopards: #b45309; --c-postex: #3451b2;
+  --ok: #157a3e; --warn: #a15c07; --bad: #b42318; --focus: #16181b; --tip-bg: #16181b; --tip-fg: #f6f7f8;
+  --font: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fs-cap: 0.8125rem; --fs-body: 1rem; --fs-h3: 1rem; --fs-h2: 1.25rem; --fs-num: 2rem; --fs-h1: clamp(1.75rem, 1.2rem + 2vw, 2.5rem);
+  --r: 10px; --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 40px;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111315; --panel: #181b1e; --fg: #eceef0; --muted: #9aa1a9; --line: #2a2f34; --grid: #23272b;
+    --c-qwqer: #2dd4bf; --c-leopards: #f59e0b; --c-postex: #8ea2ff;
+    --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --focus: #eceef0; --tip-bg: #eceef0; --tip-fg: #111315;
+  }
+}
+* { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: var(--fs-body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: var(--s6) var(--s5) 64px; display: grid; gap: var(--s6); }
+h1, h2, h3, p { margin: 0; }
+h1, h2, h3 { text-wrap: balance; }
+h1 { font-size: var(--fs-h1); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; overflow-wrap: break-word; min-width: 0; }
+h2 { font-size: var(--fs-h2); font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: var(--fs-h3); font-weight: 600; }
+.muted { color: var(--muted); font-size: var(--fs-cap); }
+.num { font-variant-numeric: tabular-nums; }
+
+.lock { min-height: 100dvh; display: grid; place-items: center; padding: var(--s5); }
+.lock-box { width: min(100%, 380px); display: grid; gap: var(--s4); }
+.lock-box h1 { font-size: 1.75rem; }
+.field { display: grid; gap: var(--s1); }
+.field label { font-size: var(--fs-cap); color: var(--muted); }
+.input { font: inherit; color: var(--fg); background-color: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; width: 100%; min-height: 44px; font-variant-numeric: tabular-nums; }
+.input:hover { border-color: var(--muted); }
+.input:focus-visible, .btn:focus-visible, .chk input:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.input[aria-invalid="true"] { border-color: var(--bad); }
+.btn { font: inherit; font-weight: 600; color: var(--bg); background-color: var(--fg); border: 1px solid var(--fg); border-radius: var(--r); padding: 12px 16px; min-height: 44px; cursor: pointer; }
+.btn:hover { opacity: 0.88; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { background-color: var(--line); border-color: var(--line); color: var(--muted); cursor: progress; }
+.btn.ghost { color: var(--fg); background-color: transparent; border-color: var(--line); font-weight: 500; font-size: var(--fs-cap); min-height: 36px; padding: 8px 16px; justify-self: start; }
+.btn.ghost:hover { border-color: var(--muted); opacity: 1; }
+.chk { display: flex; gap: var(--s2); align-items: center; font-size: var(--fs-cap); color: var(--muted); }
+.err { color: var(--bad); font-size: var(--fs-cap); min-height: 1.5em; }
+@media (prefers-reduced-motion: no-preference) { .btn { transition: transform 140ms var(--ease), opacity 140ms var(--ease); } .tip { transition: opacity 120ms var(--ease); } }
+
+.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: var(--s4); }
+.head { display: grid; gap: var(--s3); max-width: 76ch; }
+.lede { font-size: 1.125rem; line-height: 1.55; }
+.lede b { font-weight: 600; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--s5); border-top: 1px solid var(--line); padding-top: var(--s4); }
+.kpi { display: grid; gap: var(--s1); align-content: start; min-width: 0; }
+.kpi-label { font-size: var(--fs-cap); color: var(--muted); }
+.kpi-value { font-size: var(--fs-num); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.kpi-sub { font-size: var(--fs-cap); color: var(--muted); }
+.kpi-value.is-bad { color: var(--bad); }
+
+.sec { display: grid; gap: var(--s4); }
+.sec-head { display: grid; gap: var(--s1); max-width: 76ch; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: var(--s5); align-items: start; }
+.panel { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s5); display: grid; gap: var(--s4); min-width: 0; }
+
+.table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+th, td { text-align: left; padding: 12px 16px; vertical-align: top; }
+thead th { font-size: var(--fs-cap); color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tbody tr + tr td { border-top: 1px solid var(--line); }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.courier { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 600; white-space: nowrap; }
+.sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.tag { display: inline-block; font-size: var(--fs-cap); padding: 4px 12px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.tag.ok { color: var(--ok); } .tag.warn { color: var(--warn); }
+
+.sched { display: grid; gap: var(--s2); }
+.sched-row { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--s3); align-items: baseline; }
+.sched-time { font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: var(--s3); }
+.cuts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: var(--s4); }
+.cut { display: grid; gap: var(--s1); border-top: 2px solid var(--fg); padding-top: var(--s2); }
+.cut-time { font-size: var(--fs-num); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.cut-time.is-bad { color: var(--bad); }
+.flow { display: grid; gap: var(--s1); padding: 0; margin: 0; list-style: none; font-size: var(--fs-cap); color: var(--muted); }
+
+.chart { position: relative; min-height: 160px; }
+.chart.tall { min-height: 240px; }
+.chart svg { display: block; overflow: visible; }
+.chart .tick text, .chart .lbl { fill: var(--muted); font-size: 12px; font-family: var(--font); }
+.chart .domain { stroke: var(--line); }
+.chart .tick line { stroke: var(--grid); }
+.chart .val { fill: var(--fg); font-size: 12px; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s4); font-size: var(--fs-cap); color: var(--muted); margin: 0 0 var(--s2); padding: 0; list-style: none; }
+.legend li { display: inline-flex; align-items: center; gap: var(--s2); }
+.tip { position: absolute; pointer-events: none; background: var(--tip-bg); color: var(--tip-fg); border-radius: 8px; padding: 8px 12px; font-size: 12px; line-height: 1.45; opacity: 0; z-index: 2; white-space: nowrap; }
+.tip.on { opacity: 1; }
+details summary { cursor: pointer; font-size: var(--fs-cap); color: var(--muted); }
+details ul { margin: var(--s2) 0 0; padding-left: 1.1rem; display: grid; gap: var(--s1); font-size: var(--fs-cap); color: var(--muted); max-width: 84ch; }
+.foot { display: flex; flex-wrap: wrap; gap: var(--s4); justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: var(--s4); }
+[hidden] { display: none !important; }
+@media (max-width: 560px) { .wrap { padding: var(--s5) var(--s4) 48px; gap: var(--s5); } th, td { padding: 12px; } .panel { padding: var(--s4); } }
+@media print { .lock, .no-print { display: none !important; } body { background: var(--panel); } }
+</style>
+</head>
+<body>
+<noscript><p style="padding:24px">This dashboard needs JavaScript to read its encrypted data.</p></noscript>
+
+<main class="lock" id="lock">
+  <form class="lock-box" id="unlock" autocomplete="off">
+    <h1>TLC Pakistan couriers</h1>
+    <p class="muted">Enter the dashboard password to open it.</p>
+    <div class="field">
+      <label for="pw">Password</label>
+      <input class="input" id="pw" type="password" autocomplete="current-password" required>
+    </div>
+    <label class="chk"><input type="checkbox" id="remember" checked> Remember on this device</label>
+    <button class="btn" id="go" type="submit">Open dashboard</button>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+</main>
+
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div class="head">
+      <h1>TLC Pakistan couriers</h1>
+      <p class="lede" id="lede"></p>
+      <p class="muted" id="fresh"></p>
+    </div>
+    <button class="btn ghost no-print" id="lockout" type="button">Lock</button>
+  </header>
+
+  <section class="kpis" aria-label="Key figures">
+    <div class="kpi"><p class="kpi-label">Parcels handed over, last 7 days</p><p class="kpi-value" id="k-parcels"></p><p class="kpi-sub" id="k-parcels-sub"></p></div>
+    <div class="kpi"><p class="kpi-label">QWQER delivered next day</p><p class="kpi-value" id="k-qnd"></p><p class="kpi-sub" id="k-qnd-sub"></p></div>
+    <div class="kpi"><p class="kpi-label">7 PM pickup, orders on a busy day</p><p class="kpi-value" id="k-pm7"></p><p class="kpi-sub" id="k-pm7-sub"></p></div>
+    <div class="kpi"><p class="kpi-label">Extra cost of 9 AM same-day, per month</p><p class="kpi-value" id="k-sd"></p><p class="kpi-sub" id="k-sd-sub"></p></div>
+  </section>
+
+  <section class="sec" id="scorecard">
+    <div class="sec-head">
+      <h2>Courier scorecard</h2>
+      <p class="muted">Costs include fuel and GST, from each courier’s own billing. Share and next-day delivery update daily.</p>
+    </div>
+    <div class="table-wrap">
+      <table aria-label="Courier scorecard">
+        <thead><tr><th>Courier</th><th>Used for</th><th class="r">Share, 7 days</th><th class="r">Cost per parcel sent</th><th class="r">Cost per parcel delivered</th><th class="r">Returned</th><th class="r">Next day</th><th>Verdict</th></tr></thead>
+        <tbody id="score"></tbody>
+      </table>
+    </div>
+    <p class="muted" id="score-note"></p>
+  </section>
+
+  <section class="sec" id="pickups">
+    <div class="sec-head">
+      <h2>Pickups and order cut-offs</h2>
+      <p class="muted">Cut-off = pickup time, minus warehouse packing time, minus e-commerce processing. Couriers get a 1-hour margin, but orders must be ready at the pickup time.</p>
+    </div>
+    <div class="two">
+      <div class="panel">
+        <div class="sched" aria-label="Pickup schedule">
+          <div class="sched-row"><span class="sched-time">9:00 AM</span><span>QWQER, Lahore orders, delivered the same day</span></div>
+          <div class="sched-row"><span class="sched-time">7:00 PM</span><span>QWQER Lahore next-day, plus PostEx for every other city, packed together</span></div>
+        </div>
+        <form class="form no-print" id="calc" aria-label="Cut-off calculator">
+          <div class="field"><label for="c-min">Minutes per order, per packer</label><input class="input" id="c-min" type="number" min="0.5" step="0.1" inputmode="decimal"></div>
+          <div class="field"><label for="c-ecom">E-commerce processing, minutes</label><input class="input" id="c-ecom" type="number" min="0" step="5" inputmode="numeric"></div>
+          <div class="field"><label for="c-pk9">Packers for 9 AM</label><input class="input" id="c-pk9" type="number" min="1" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="c-pk7">Packers for 7 PM</label><input class="input" id="c-pk7" type="number" min="1" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="c-o9">Orders to plan for, 9 AM</label><input class="input" id="c-o9" type="number" min="0" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="c-o7">Orders to plan for, 7 PM</label><input class="input" id="c-o7" type="number" min="0" step="1" inputmode="numeric"></div>
+        </form>
+        <button class="btn ghost no-print" id="c-reset" type="button">Reset to current working</button>
+        <div class="cuts" id="cuts" aria-live="polite"></div>
+        <p class="muted" id="calc-note"></p>
+      </div>
+      <div class="panel">
+        <h3>Orders per pickup, last 60 days</h3>
+        <p class="muted">Bar: average day. Solid tick: a busy day (9 days in 10 are at or below it). Dashed line: what the cut-offs are planned for.</p>
+        <div class="chart" id="ch-slots"></div>
+        <p class="muted" id="slot-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="volumes">
+    <div class="sec-head">
+      <h2>Where the parcels go, and how fast they arrive</h2>
+      <p class="muted">Shopify fulfilments by the month they were handed to the courier. The current month runs to yesterday.</p>
+    </div>
+    <div class="two">
+      <div class="panel"><h3>Parcels by courier and month</h3><div class="chart tall" id="ch-vol"></div></div>
+      <div class="panel"><h3>Delivered the next day, by month</h3><div class="chart tall" id="ch-speed"></div></div>
+    </div>
+  </section>
+
+  <section class="sec" id="returns">
+    <div class="sec-head">
+      <h2>Returns</h2>
+      <p class="muted">A returned parcel is billed once, at its delivery rate, with no extra return fee. Its shipping still buys no sale.</p>
+    </div>
+    <div class="two">
+      <div class="panel"><h3>Return rate by courier and month</h3><div class="chart" id="ch-ret"></div></div>
+      <div class="panel"><h3>Why QWQER parcels came back, October</h3><div class="chart" id="ch-reason"></div></div>
+    </div>
+  </section>
+
+  <section class="sec" id="actions">
+    <div class="sec-head">
+      <h2>What to do, and what it saves</h2>
+      <p class="muted" id="act-note"></p>
+    </div>
+    <div class="panel"><div class="chart" id="ch-act"></div></div>
+  </section>
+
+  <details>
+    <summary>How these numbers are worked out</summary>
+    <ul>
+      <li>Live figures come from Shopify orders and fulfilments, pulled every morning before 11 AM PKT. Courier names are read from each fulfilment’s tracking company.</li>
+      <li>Orders per pickup leave out cancelled orders. A busy day is the 90th percentile: 9 days in 10 had that many orders or fewer.</li>
+      <li>Next day means delivered within one calendar day of being handed to the courier, using Shopify’s delivered date. Parcels without a delivered date are left out.</li>
+      <li>Costs are the average across all parcel sizes from each courier’s billing, per parcel sent and per parcel that reached the customer. Leopards’ charges exclude fuel, so 10% is added to compare like for like.</li>
+      <li>Return rate = returns ÷ (delivered + returned). PostEx’s is estimated from Shopify voided orders, calibrated on QWQER and Leopards.</li>
+      <li>The cut-off calculator runs in your browser only. Changing it does not change anything for anyone else.</li>
+    </ul>
+  </details>
+  <footer class="foot muted"><span id="foot-fresh"></span><span>Data is encrypted; this page needs the password to read it.</span></footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  const KEY = 'tlc-courier-pw';
+  const $ = (id) => document.getElementById(id);
+  const store = { get() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }, set(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }, del() { try { localStorage.removeItem(KEY); } catch (e) {} } };
+  const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  let D = null, ENC = null;
+
+  async function fetchEnc() {
+    if (ENC) return ENC;
+    const r = await fetch('data.enc.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('fetch');
+    ENC = await r.json(); return ENC;
+  }
+  async function decrypt(pw) {
+    const e = await fetchEnc();
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(e.salt), iterations: e.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(e.iv) }, key, b64(e.ct));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+  async function open(pw, remember) {
+    $('go').disabled = true; $('err').textContent = '';
+    try {
+      D = await decrypt(pw);
+      if (remember) store.set(pw); else store.del();
+      $('lock').hidden = true; $('app').hidden = false; render();
+    } catch (err) {
+      $('pw').setAttribute('aria-invalid', 'true');
+      $('err').textContent = err && err.message === 'fetch' ? 'The data file could not be loaded. Check your connection and try again.' : 'That password did not open the dashboard.';
+      store.del();
+    } finally { $('go').disabled = false; }
+  }
+  $('unlock').addEventListener('submit', (e) => { e.preventDefault(); open($('pw').value, $('remember').checked); });
+  $('pw').addEventListener('input', () => $('pw').removeAttribute('aria-invalid'));
+  $('lockout').addEventListener('click', () => { store.del(); D = null; $('app').hidden = true; $('lock').hidden = false; $('pw').value = ''; $('pw').focus(); });
+  const saved = store.get(); if (saved) open(saved, true);
+
+  // ---------- formatting ----------
+  const COL = { QWQER: 'var(--c-qwqer)', Leopards: 'var(--c-leopards)', PostEx: 'var(--c-postex)' };
+  const NAMES = ['QWQER', 'Leopards', 'PostEx'];
+  const pct = (v) => (v == null || isNaN(v)) ? 'n/a' : Math.round(v * 100) + '%';
+  const pct1 = (v) => (v == null || isNaN(v)) ? 'n/a' : (v * 100).toFixed(1) + '%';
+  const rs = (v) => 'Rs. ' + d3.format(',.0f')(v);
+  const int = (v) => d3.format(',.0f')(v);
+  const by = (arr, k, v) => (arr || []).find((r) => r[k] === v) || {};
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  const setText = (id, t) => { const e = $(id); if (e) e.textContent = t; };
+  const bold = (t) => el('b', null, t);
+  const tx = (t) => document.createTextNode(t);
+
+  function tip(box) {
+    let t = box.querySelector(':scope > .tip'); if (!t) { t = el('div', 'tip'); box.appendChild(t); }
+    return {
+      show(lines, x, y) { t.replaceChildren(...lines.map((l, i) => { const d = el('div', null, l); if (i === 0) d.style.fontWeight = '600'; return d; })); t.classList.add('on');
+        const bw = box.clientWidth, tw = t.offsetWidth; t.style.left = Math.max(0, Math.min(bw - tw, x - tw / 2)) + 'px'; t.style.top = Math.max(-8, y - t.offsetHeight - 12) + 'px'; },
+      hide() { t.classList.remove('on'); }
+    };
+  }
+  function legend(names) { const ul = el('ul', 'legend'); names.forEach((n) => { const li = el('li'); const s = el('span', 'sw'); s.style.background = COL[n]; li.append(s, tx(n)); ul.appendChild(li); }); return ul; }
+  function hbars(box, rows, opt) {
+    box.replaceChildren();
+    const w = Math.max(280, box.clientWidth), rh = 34, labelW = Math.min(opt.labelW || 220, w * 0.5), h = rows.length * rh + 6;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img').attr('aria-label', opt.aria);
+    const x = d3.scaleLinear().domain([0, d3.max(rows, (r) => r.value) || 1]).range([0, w - labelW - 84]);
+    const g = svg.selectAll('g').data(rows).join('g').attr('transform', (d, i) => `translate(0,${i * rh + 4})`);
+    g.append('text').attr('class', 'lbl').attr('x', 0).attr('y', 17).text((d) => d.label).each(function () { let s = this.textContent; while (this.getComputedTextLength() > labelW - 10 && s.length > 4) { s = s.slice(0, -2); this.textContent = s + '…'; } });
+    g.append('rect').attr('x', labelW).attr('y', 6).attr('height', 16).attr('rx', 3).attr('width', (d) => Math.max(1, x(d.value))).style('fill', (d) => d.color);
+    g.append('text').attr('class', 'val').attr('x', (d) => labelW + x(d.value) + 6).attr('y', 18).text((d) => d.valueText);
+    const tp = tip(box);
+    g.append('rect').attr('width', w).attr('height', rh).style('fill', 'transparent')
+      .on('pointerenter pointermove', (ev, d) => { const [mx, my] = d3.pointer(ev, box); tp.show(d.tip, mx, my); }).on('pointerleave', () => tp.hide());
+  }
+
+  // ---------- page ----------
+  function render() {
+    if (!D) return;
+    const meta = D.meta[0], plan = D.plan[0];
+    const q = by(D.couriers, 'courier', 'QWQER'), px = by(D.couriers, 'courier', 'PostEx'), lp = by(D.couriers, 'courier', 'Leopards');
+    const am9 = by(D.slots, 'key', 'am9'), pm7 = by(D.slots, 'key', 'pm7'), pl = by(D.slots, 'key', 'pm7_lhr'), po = by(D.slots, 'key', 'pm7_other');
+    const pm7Above = Math.round(pm7.p90) > plan.plan_7pm, am9Above = Math.round(am9.p90) > plan.plan_9am;
+    const lead = q.share_7d >= px.share_7d ? q : px;
+
+    $('lede').replaceChildren(tx(lead.courier + ' carried '), bold(pct(lead.share_7d)), tx(' of parcels in the last 7 days. QWQER delivers '), bold(pct(q.next_day)),
+      tx(' of Lahore parcels the next day, PostEx '), bold(pct(px.next_day)), tx(' elsewhere. On a busy day the 7 PM pickup has '), bold(int(Math.round(pm7.p90))),
+      tx(pm7Above ? ' orders to pack, more than the cut-offs are planned for.' : ' orders to pack, within what the cut-offs are planned for.'));
+    setText('fresh', 'Volumes, courier mix and delivery speed: Shopify, refreshed daily at 11 AM PKT, last on ' + meta.refreshed + ' (data to ' + meta.data_to + '). Costs and returns: last known invoices, October 2026 (PostEx September).');
+    setText('foot-fresh', 'Last refreshed ' + meta.refreshed);
+
+    const tot7 = D.couriers.reduce((s, r) => s + (+r.parcels_7d || 0), 0);
+    setText('k-parcels', int(tot7));
+    setText('k-parcels-sub', 'PostEx ' + pct(px.share_7d) + ', QWQER ' + pct(q.share_7d) + ', Leopards ' + pct(lp.share_7d));
+    setText('k-qnd', pct(q.next_day));
+    setText('k-qnd-sub', 'PostEx ' + pct(px.next_day) + '; parcels handed over ' + meta.speed_window);
+    setText('k-pm7', int(Math.round(pm7.p90))); $('k-pm7').classList.toggle('is-bad', pm7Above);
+    setText('k-pm7-sub', (pm7Above ? 'Above the plan of ' + plan.plan_7pm + '; review the cut-off.' : 'Planned for ' + plan.plan_7pm + '.') + ' Average day ' + Math.round(pm7.avg60) + '.');
+    const sd = Math.round(am9.avg60 * plan.sameday_extra_per_parcel * plan.days_per_month);
+    setText('k-sd', rs(sd));
+    setText('k-sd-sub', 'Rs. ' + plan.sameday_extra_per_parcel.toFixed(2) + ' more per parcel than overnight, at ' + am9.avg60.toFixed(1) + ' morning orders a day');
+
+    // scorecard
+    const tone = { QWQER: 'ok', PostEx: 'ok', Leopards: 'warn' };
+    $('score').replaceChildren(...D.scorecard.map((s) => {
+      const c = by(D.couriers, 'courier', s.courier); const tr = el('tr');
+      const name = el('span', 'courier'); const sw = el('span', 'sw'); sw.style.background = COL[s.courier]; name.append(sw, tx(s.courier));
+      const td = (x, cls) => { const t = el('td', cls); if (x instanceof Node) t.appendChild(x); else t.textContent = x; return t; };
+      tr.append(td(name), td(s.used_for), td(pct(c.share_7d), 'r'), td(rs(s.cost_sent), 'r'), td(rs(s.cost_delivered), 'r'),
+        td(pct1(s.return_rate) + (s.courier === 'PostEx' ? ' (est.)' : ''), 'r'), td((+c.delivered >= 30) ? pct(c.next_day) : 'Too few', 'r'), td(el('span', 'tag ' + (tone[s.courier] || ''), s.verdict)));
+      return tr;
+    }));
+    const door = by(D.return_reasons, 'reason', 'Cancelled by customer at the door');
+    setText('score-note', 'Cost periods: QWQER and Leopards October 2026, PostEx September 2026. On QWQER, ' + pct(door.share) + ' of returns are customers refusing at the door, not the courier.');
+
+    // calculator defaults
+    const defs = { 'c-min': plan.minutes_per_order, 'c-ecom': plan.ecom_minutes, 'c-pk9': plan.packers, 'c-pk7': plan.packers, 'c-o9': plan.plan_9am, 'c-o7': plan.plan_7pm };
+    Object.entries(defs).forEach(([id, v]) => { const i = $(id); if (i && i.value === '') i.value = v; });
+    $('c-reset').onclick = () => { Object.entries(defs).forEach(([id, v]) => { $(id).value = v; }); cuts(); };
+    setText('calc-note', 'Defaults: the warehouse working of 23 Nov (' + plan.staff + ' staff, ' + plan.orders_session + ' orders in ' + plan.hours + ' hours) and order volumes that covered 9 days in 10. The warehouse still has to confirm its real packing time.');
+    cuts();
+
+    setText('slot-note', 'The 7 PM batch is about ' + Math.round(pl.avg60) + ' Lahore next-day orders plus ' + Math.round(po.avg60) + ' other-city orders on an average day. ' + meta.split_times + '.' + (am9Above ? ' The 9 AM batch is above its plan on busy days.' : ''));
+    setText('act-note', 'Monthly saving including GST, at October volumes. Together up to ' + rs(d3.sum(D.actions, (a) => a.saving)) + ' a month.');
+    charts();
+  }
+
+  const fmtT = (mins) => { if (mins < 0) return 'Not possible'; const h = Math.floor(mins / 60), m = Math.round(mins % 60); return d3.timeFormat('%-I:%M %p')(new Date(2000, 0, 1, m === 60 ? h + 1 : h, m === 60 ? 0 : m)); };
+  const num = (id, d) => { const v = parseFloat($(id).value); return isFinite(v) && v >= 0 ? v : d; };
+  function cuts() {
+    const mpo = num('c-min', 7.4), ecom = num('c-ecom', 30);
+    const out = [['9 AM pickup', 540, num('c-o9', 40), Math.max(1, num('c-pk9', 6))], ['7 PM pickup', 1140, num('c-o7', 150), Math.max(1, num('c-pk7', 6))]].map(([lab, pick, orders, packers]) => {
+      const pack = orders * mpo / packers, cut = pick - pack - ecom;
+      const b = el('div', 'cut'); const t = el('p', 'cut-time' + (cut < 0 ? ' is-bad' : ''), fmtT(cut));
+      b.append(el('p', 'kpi-label', 'Order cut-off for the ' + lab), t, el('p', 'kpi-sub', cut < 0 ? 'Packing cannot finish in time with these numbers.' : 'Packing starts ' + fmtT(pick - pack) + ' and takes ' + Math.round(pack) + ' min'));
+      return { b, cut };
+    });
+    const [a, p] = out.map((o) => fmtT(o.cut));
+    const ul = el('ul', 'flow');
+    [`Lahore orders up to ${a} go out at 9 AM and arrive the same day.`, `Lahore orders from ${a} to ${p} go out at 7 PM and arrive the next day.`,
+     `Lahore orders after ${p} wait for the next 9 AM pickup.`, `Other cities: orders up to ${p} go out with PostEx at 7 PM; later ones the next evening.`].forEach((s) => ul.appendChild(el('li', null, s)));
+    $('cuts').replaceChildren(...out.map((o) => o.b), ul);
+  }
+  document.querySelectorAll('#calc .input').forEach((i) => i.addEventListener('input', cuts));
+  $('calc').addEventListener('submit', (e) => e.preventDefault());
+
+  function charts() {
+    const plan = D.plan[0];
+    // orders per pickup vs plan
+    (function () {
+      const box = $('ch-slots'); box.replaceChildren();
+      const rows = [['9 AM pickup', by(D.slots, 'key', 'am9'), plan.plan_9am], ['7 PM pickup', by(D.slots, 'key', 'pm7'), plan.plan_7pm]].map(([n, s, pl]) => ({ n, avg: +s.avg60, p90: +s.p90, avg7: +s.avg7, pl: +pl, above: Math.round(s.p90) > pl }));
+      const w = Math.max(280, box.clientWidth), labelW = 96, rh = 54, h = rows.length * rh + 28;
+      const x = d3.scaleLinear().domain([0, d3.max(rows, (r) => Math.max(r.p90, r.pl)) * 1.08]).range([labelW, w - 12]).nice();
+      const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img').attr('aria-label', 'Average and busy-day orders for each pickup against plan');
+      svg.append('g').attr('transform', `translate(0,${h - 22})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((w - labelW) / 70))).tickSize(-(h - 26)).tickSizeOuter(0)).call((g) => g.select('.domain').remove());
+      const tp = tip(box);
+      const g = svg.selectAll('g.r').data(rows).join('g').attr('class', 'r').attr('transform', (d, i) => `translate(0,${i * rh + 6})`);
+      g.append('text').attr('class', 'lbl').attr('x', 0).attr('y', 24).text((d) => d.n);
+      g.append('rect').attr('x', labelW).attr('y', 12).attr('height', 18).attr('rx', 3).attr('width', (d) => x(d.avg) - labelW).style('fill', 'var(--c-qwqer)');
+      g.append('text').attr('class', 'val').attr('x', (d) => x(d.avg) - 6).attr('y', 25).attr('text-anchor', 'end').style('fill', 'var(--panel)').text((d) => Math.round(d.avg));
+      g.append('line').attr('x1', (d) => x(d.pl)).attr('x2', (d) => x(d.pl)).attr('y1', 2).attr('y2', 40).style('stroke', 'var(--muted)').style('stroke-dasharray', '3 3').style('stroke-width', 1.5);
+      g.append('line').attr('x1', (d) => x(d.p90)).attr('x2', (d) => x(d.p90)).attr('y1', 6).attr('y2', 36).style('stroke', (d) => d.above ? 'var(--bad)' : 'var(--fg)').style('stroke-width', 2.5);
+      g.append('rect').attr('width', w).attr('height', rh).style('fill', 'transparent')
+        .on('pointerenter pointermove', (ev, d) => { const [mx, my] = d3.pointer(ev, box); tp.show([d.n, 'Average day: ' + d.avg.toFixed(1), 'Last 7 days: ' + d.avg7.toFixed(1) + ' a day', 'Busy day: ' + Math.round(d.p90), 'Planned for: ' + d.pl], mx, my); }).on('pointerleave', () => tp.hide());
+    })();
+
+    // volumes, stacked
+    (function () {
+      const box = $('ch-vol'); box.replaceChildren(legend(NAMES));
+      const data = D.volumes.map((r) => ({ ...r, QWQER: +r.QWQER, Leopards: +r.Leopards, PostEx: +r.PostEx }));
+      const w = Math.max(280, box.clientWidth), h = 240, m = { t: 14, r: 8, b: 26, l: 44 };
+      const x = d3.scaleBand().domain(data.map((d) => d.month)).range([m.l, w - m.r]).padding(0.3);
+      const y = d3.scaleLinear().domain([0, d3.max(data, (d) => d.QWQER + d.Leopards + d.PostEx)]).nice().range([h - m.b, m.t]);
+      const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img').attr('aria-label', 'Parcels handed to each courier by month');
+      svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(w - m.l - m.r)).tickFormat(d3.format('~s'))).call((g) => g.select('.domain').remove());
+      const short = (s) => s.replace(/ 20\d\d/, '').replace(/\s*\(to (\d+)\w*\)/, ' to $1');
+      svg.append('g').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickFormat(short).tickSizeOuter(0));
+      const tp = tip(box);
+      svg.append('g').selectAll('g').data(d3.stack().keys(NAMES)(data)).join('g').style('fill', (s) => COL[s.key])
+        .selectAll('rect').data((s) => s).join('rect').attr('x', (p) => x(p.data.month)).attr('width', x.bandwidth()).attr('y', (p) => y(p[1])).attr('height', (p) => Math.max(0, y(p[0]) - y(p[1])))
+        .on('pointerenter pointermove', (ev, p) => { const [mx, my] = d3.pointer(ev, box); const d = p.data; tp.show([d.month, 'QWQER: ' + int(d.QWQER), 'Leopards: ' + int(d.Leopards), 'PostEx: ' + int(d.PostEx), 'Total: ' + int(d.QWQER + d.Leopards + d.PostEx)], mx, my); })
+        .on('pointerleave', () => tp.hide());
+      svg.append('g').selectAll('text').data(data).join('text').attr('class', 'val').attr('text-anchor', 'middle').attr('x', (d) => x(d.month) + x.bandwidth() / 2).attr('y', (d) => y(d.QWQER + d.Leopards + d.PostEx) - 5).text((d) => int(d.QWQER + d.Leopards + d.PostEx));
+    })();
+
+    // next-day by month
+    (function () {
+      const box = $('ch-speed'); box.replaceChildren(legend(NAMES));
+      const rows = D.speed.filter((r) => r.next_day != null && +r.delivered >= 30);
+      const months = [...new Set(D.speed.map((r) => r.month))];
+      const w = Math.max(280, box.clientWidth), h = 240, m = { t: 14, r: 48, b: 26, l: 42 };
+      const x = d3.scalePoint().domain(months).range([m.l + 12, w - m.r]);
+      const y = d3.scaleLinear().domain([0, Math.max(0.6, d3.max(rows, (r) => +r.next_day) || 0)]).nice().range([h - m.b, m.t]);
+      const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img').attr('aria-label', 'Share delivered the next day by courier and month');
+      svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('.0%')).tickSize(-(w - m.l - m.r))).call((g) => g.select('.domain').remove());
+      svg.append('g').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickFormat((s) => s.replace(/\s*\(to (\d+)\w*\)/, ' to $1')).tickSizeOuter(0));
+      const tp = tip(box);
+      NAMES.forEach((n) => {
+        const pts = rows.filter((r) => r.courier === n).sort((a, b) => months.indexOf(a.month) - months.indexOf(b.month)); if (!pts.length) return;
+        svg.append('path').datum(pts).attr('fill', 'none').style('stroke', COL[n]).style('stroke-width', 2).attr('d', d3.line().x((d) => x(d.month)).y((d) => y(+d.next_day)));
+        svg.append('g').selectAll('circle').data(pts).join('circle').attr('r', 4.5).attr('cx', (d) => x(d.month)).attr('cy', (d) => y(+d.next_day)).style('fill', COL[n])
+          .on('pointerenter pointermove', (ev, d) => { const [mx, my] = d3.pointer(ev, box); tp.show([d.courier + ', ' + d.month, 'Next day: ' + pct(+d.next_day), '5 days or more: ' + pct(+d.five_plus), 'Average: ' + (+d.avg_days).toFixed(1) + ' days', 'Delivered: ' + int(+d.delivered)], mx, my); })
+          .on('pointerleave', () => tp.hide());
+        const last = pts[pts.length - 1]; svg.append('text').attr('class', 'val').attr('x', x(last.month) + 8).attr('y', y(+last.next_day) + 4).text(pct(+last.next_day));
+      });
+    })();
+
+    hbars($('ch-ret'), D.returns_month.filter((r) => r.return_rate != null).map((r) => ({ label: r.courier + ', ' + r.month.replace(' 2026', '') + (r.estimated ? ' (est.)' : ''), value: +r.return_rate, color: COL[r.courier], valueText: pct1(+r.return_rate),
+      tip: [r.courier + ', ' + r.month, 'Return rate: ' + pct1(+r.return_rate), 'Returns: ' + int(+r.returns) + (r.estimated ? ' (estimated)' : ''), 'Shipping on them: ' + rs(+r.shipping_incl_tax) + ' incl. tax'] })), { aria: 'Return rate by courier and month', labelW: 170 });
+    const totR = d3.sum(D.return_reasons, (r) => +r.returns);
+    hbars($('ch-reason'), D.return_reasons.map((r) => ({ label: r.reason, value: +r.share, color: r.owner === 'Courier' ? 'var(--bad)' : 'var(--c-qwqer)', valueText: pct(+r.share) + ' (' + int(+r.returns) + ')',
+      tip: [r.reason, int(+r.returns) + ' of ' + int(totR) + ' returns', 'Whose issue: ' + r.owner] })), { aria: 'Why QWQER parcels were returned in October', labelW: 250 });
+    hbars($('ch-act'), D.actions.slice().sort((a, b) => b.saving - a.saving).map((r) => ({ label: r.action, value: +r.saving, color: 'var(--fg)', valueText: rs(+r.saving),
+      tip: [r.action, rs(+r.saving) + ' a month', 'Owner: ' + r.owner, r.note] })), { aria: 'Monthly saving by action', labelW: 420 });
+  }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (D) charts(); }, 150); });
+})();
+</script>
+</body>
+</html>
