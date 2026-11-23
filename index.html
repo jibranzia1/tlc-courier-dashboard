@@ -366,7 +366,7 @@ details ul { margin: var(--s2) 0 0; padding-left: 1.1rem; display: grid; gap: va
     charts();
   }
 
-  const fmtT = (mins) => { if (mins < 0) return 'Not possible'; const h = Math.floor(mins / 60), m = Math.round(mins % 60); return d3.timeFormat('%-I:%M %p')(new Date(2000, 0, 1, m === 60 ? h + 1 : h, m === 60 ? 0 : m)); };
+  const fmtT = (mins) => { if (mins < 0) return 'Not possible'; const t = Math.floor(mins + 1e-9); return d3.timeFormat('%-I:%M %p')(new Date(2000, 0, 1, Math.floor(t / 60), t % 60)); };
   const num = (id, d) => { const v = parseFloat($(id).value); return isFinite(v) && v >= 0 ? v : d; };
   function cuts() {
     const mpo = num('c-min', 7.4), ecom = num('c-ecom', 30);
