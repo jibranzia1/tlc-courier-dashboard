@@ -34,7 +34,7 @@
   --color-rule: oklch(86% 0.008 250); --color-rule-2: oklch(36% 0.060 255);
   --color-accent: oklch(88% 0.200 120); --color-accent-hover: oklch(84% 0.205 122); --color-accent-ink: oklch(16% 0.080 260); --color-accent-deep: oklch(55% 0.145 130);
   --color-focus: oklch(55% 0.145 130);
-  --color-error: oklch(52% 0.19 27); --color-error-soft: oklch(95% 0.03 27); --color-warn: oklch(60% 0.14 70);
+  --color-error: oklch(52% 0.19 27); --color-error-soft: oklch(95% 0.03 27); --color-warn: oklch(60% 0.14 70); --color-warn-soft: oklch(94% 0.05 85);
   --color-qwqer: oklch(52% 0.11 185); --color-leopards: oklch(63% 0.15 62); --color-postex: oklch(44% 0.17 266);
   --color-band: oklch(16% 0.080 260); --color-band-ink: oklch(97% 0.006 250); --color-band-muted: oklch(78% 0.03 255);
   --color-scrim: oklch(16% 0.080 260 / 0.5);
@@ -46,7 +46,7 @@
     --color-ink: oklch(96% 0.008 250); --color-ink-2: oklch(88% 0.012 250); --color-muted: oklch(72% 0.025 252);
     --color-rule: oklch(31% 0.035 258); --color-rule-2: oklch(78% 0.04 255);
     --color-accent-deep: oklch(80% 0.17 125); --color-focus: oklch(85% 0.18 122);
-    --color-error: oklch(72% 0.16 27); --color-error-soft: oklch(28% 0.06 27); --color-warn: oklch(80% 0.13 75);
+    --color-error: oklch(72% 0.16 27); --color-error-soft: oklch(28% 0.06 27); --color-warn: oklch(80% 0.13 75); --color-warn-soft: oklch(30% 0.05 80);
     --color-qwqer: oklch(78% 0.11 185); --color-leopards: oklch(80% 0.13 68); --color-postex: oklch(74% 0.13 266);
     --color-band: oklch(12% 0.03 262); --color-band-ink: oklch(96% 0.008 250); --color-band-muted: oklch(72% 0.025 252);
     --color-scrim: oklch(8% 0.02 262 / 0.6);
@@ -238,6 +238,38 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
 .guide-list dt { font-weight: 600; }
 .guide-list dd { margin: var(--space-2xs) 0 0; color: var(--color-muted); font-size: var(--text-sm); }
 
+/* courier tabs */
+.tab-sw { display: inline-block; width: 8px; height: 8px; margin-right: var(--space-xs); vertical-align: 2px; }
+.c-hero { display: grid; gap: var(--space-xs); }
+.c-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.c-name h2 { font-size: var(--text-5xl); line-height: 0.95; }
+.c-sw { width: 16px; height: 16px; border-radius: 3px; }
+.c-role { color: var(--color-muted); font-size: var(--text-lg); max-width: 80ch; }
+.tag.on { background: color-mix(in oklab, var(--color-accent) 45%, var(--color-paper)); color: var(--color-accent-ink); }
+.grades { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-md); }
+.grade { display: grid; align-content: start; gap: var(--space-2xs); padding: var(--space-md); border-radius: var(--radius-card); background: var(--color-paper-2); border-top: 4px solid var(--color-rule); }
+.grade.g-good { border-top-color: var(--color-accent-deep); }
+.grade.g-watch { border-top-color: var(--color-warn); }
+.grade.g-bad { border-top-color: var(--color-error); }
+.grade-l { font-size: var(--text-sm); font-weight: 500; color: var(--color-muted); }
+.grade-v { font-family: var(--font-display); font-weight: var(--display-weight); font-size: var(--text-5xl); line-height: 0.95; font-variant-numeric: tabular-nums; }
+.grade-v small { font-size: var(--text-xl); margin-left: var(--space-3xs); }
+.grade-g { font-weight: 600; }
+.g-good .grade-g { color: var(--color-accent-deep); }
+.g-watch .grade-g { color: var(--color-warn); }
+.g-bad .grade-g { color: var(--color-error); }
+.grade-t { font-size: var(--text-xs); color: var(--color-muted); }
+.gchip { display: inline-block; min-width: 3.5em; padding: var(--space-3xs) var(--space-xs); border-radius: 3px; background: var(--color-paper-2); text-align: right; }
+.gchip.g-good { background: color-mix(in oklab, var(--color-accent) 40%, var(--color-paper)); color: var(--color-accent-ink); }
+.gchip.g-watch { background: var(--color-warn-soft); color: var(--color-ink); }
+.gchip.g-bad { background: var(--color-error-soft); color: var(--color-error); }
+.figs.mini { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (prefers-color-scheme: dark) {
+  .gchip.g-good, .tag.on, .delta.good { background: color-mix(in oklab, var(--color-accent) 22%, var(--color-paper)); color: var(--color-ink); }
+}
+.who-link { padding: 0; border: 0; background: none; cursor: pointer; border-bottom: var(--rule-hair) solid transparent; transition: border-color var(--dur-short) ease; }
+.who-link:hover { border-bottom-color: var(--color-ink); }
+
 /* pickups board */
 .board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); background: var(--color-band); color: var(--color-band-ink); border-radius: var(--radius-card); overflow: hidden; }
 .leg { display: grid; gap: var(--space-sm); padding: var(--space-lg); }
@@ -281,6 +313,8 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
   .range-say { margin-left: 0; width: 100%; }
   .calc { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .guide-list { grid-template-columns: minmax(0, 1fr); }
+  .grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .c-name h2 { font-size: var(--text-4xl); }
   .brief-list li { grid-template-columns: minmax(0, 1fr); }
   .brief-go { justify-self: start; }
 }
@@ -333,6 +367,9 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
       </div>
       <nav class="tabs" role="tablist" aria-label="Sections" id="tabs">
         <button class="tab" role="tab" id="t-overview" aria-controls="p-overview" data-tab="overview">Overview</button>
+        <button class="tab" role="tab" id="t-qwqer" aria-controls="p-qwqer" data-tab="qwqer"><span class="swatch tab-sw" style="background: var(--color-qwqer)"></span>QWQER</button>
+        <button class="tab" role="tab" id="t-postex" aria-controls="p-postex" data-tab="postex"><span class="swatch tab-sw" style="background: var(--color-postex)"></span>PostEx</button>
+        <button class="tab" role="tab" id="t-leopards" aria-controls="p-leopards" data-tab="leopards"><span class="swatch tab-sw" style="background: var(--color-leopards)"></span>Leopards</button>
         <button class="tab" role="tab" id="t-late" aria-controls="p-late" data-tab="late">Late parcels<span class="count" id="late-count"></span></button>
         <button class="tab" role="tab" id="t-speed" aria-controls="p-speed" data-tab="speed">Speed by city</button>
         <button class="tab" role="tab" id="t-returns" aria-controls="p-returns" data-tab="returns">Returns</button>

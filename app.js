@@ -112,7 +112,7 @@
 
   // ---------- state ----------
   const st = { tab: 'overview', p: '60', from: null, to: null, lc: 'all', la: '14', lq: '', shown: 50 };
-  const TABS = ['overview', 'late', 'speed', 'returns', 'pickups', 'costs'];
+  const TABS = ['overview', 'qwqer', 'postex', 'leopards', 'late', 'speed', 'returns', 'pickups', 'costs'];
   function readHash() {
     const h = new URLSearchParams(location.hash.slice(1));
     if (TABS.includes(h.get('t'))) st.tab = h.get('t');
@@ -256,6 +256,7 @@
     tbl.replaceChildren(thead, tb);
   }
   const td = (content, cls) => { const t = el('td', cls || null); if (content instanceof Node) t.append(content); else if (content != null) t.textContent = content; return t; };
+  function whoLink(c) { const b = el('button', 'who-link'); b.type = 'button'; b.title = 'Open the ' + c + ' tab'; b.append(who(c)); b.addEventListener('click', () => { showTab(CKEY[c]); window.scrollTo({ top: 0 }); }); return b; }
   function who(c) { const s = el('span', 'who'); const w = el('span', 'swatch'); w.style.background = COL[c]; s.append(w, document.createTextNode(c)); return s; }
   function split(b) {
     const tot = d3.sum(b), s = el('div', 'split');
@@ -516,7 +517,7 @@
       CS.map((c) => {
         const o = a.by[c], has = o.n > 0;
         return [
-          td(who(c)), td(fInt(o.n), 'n'), td(has ? fPct(o.share) : 'n/a', 'n' + (has ? '' : ' dim')),
+          td(whoLink(c)), td(fInt(o.n), 'n'), td(has ? fPct(o.share) : 'n/a', 'n' + (has ? '' : ' dim')),
           td(fPct(o.op), 'n cell-big' + (o.op == null ? ' dim' : '')), td(fDay(o.avg), 'n'), td(fPct(o.g5), 'n' + (o.g5 > 0.1 ? ' bad-t' : '')),
           td(o.sd ? split(o.b) : el('span', 'dim small', has ? 'Not settled yet' : 'No parcels in range')),
           td(live(c) ? fPct1(o.rr) : 'Not connected', 'n' + (live(c) ? '' : ' dim')),
@@ -731,6 +732,198 @@
       acts.map((r) => [td(r.action), td(fRs(r.saving), 'n cell-big'), td(r.owner), td(r.note, 'small dim')]).concat([[td(el('b', null, 'Total')), td(fRs(d3.sum(acts, (r) => r.saving)), 'n cell-big'), td(''), td('')]]), { animate: first });
   }
 
+  // ---------- courier tabs ----------
+  const CKEY = { QWQER: 'qwqer', PostEx: 'postex', Leopards: 'leopards' };
+  COL.All = 'var(--color-muted)';
+  // targets the grades are measured against (TLC's own bar; change here)
+  const TARGETS = {
+    op: { label: 'Delivered on promise', good: 0.8, watch: 0.6, up: true, note: '9 AM pickup same day, 7 PM pickup within 24 hours' },
+    pk: { label: 'Collected at the scheduled pickup', good: 0.95, watch: 0.85, up: true, note: 'Picked up at the pickup on the day we hand it over' },
+    rr: { label: 'Came back', good: 0.1, watch: 0.13, up: false, note: 'Returned or on the way back' },
+    fa: { label: 'Delivered on the first attempt', good: 0.9, watch: 0.85, up: true, note: 'Of parcels that reached an outcome' },
+  };
+  const GRADE = { good: 'On target', watch: 'Watch', bad: 'Act now' };
+  function grade(k, v) {
+    if (v == null || isNaN(v)) return null;
+    const t = TARGETS[k];
+    if (t.up) return v >= t.good ? 'good' : v >= t.watch ? 'watch' : 'bad';
+    return v <= t.good ? 'good' : v <= t.watch ? 'watch' : 'bad';
+  }
+  const tgtText = (k) => { const t = TARGETS[k]; return 'Target ' + (t.up ? '' : 'under ') + fPct(t.good); };
+
+  function courierAgg(rows) {
+    const o = { n: 0, pn: 0, po: 0, pk: 0, pko: 0, ph: [0, 0, 0, 0], hb: [0, 0, 0, 0, 0], at: [0, 0, 0], ret: 0, cdl: 0, src: 0, sd: 0, sum: 0, b: [0, 0, 0, 0, 0, 0], rtn_n: 0, rtn_d: 0 };
+    for (const r of rows) {
+      o.n += r.n; o.pn += r.pn || 0; o.po += r.po || 0; o.pk += r.pk || 0; o.pko += r.pko || 0; o.src += r.src || 0;
+      (r.ph || []).forEach((v, i) => { o.ph[i] += v; }); (r.hb || []).forEach((v, i) => { o.hb[i] += v; }); (r.at || []).forEach((v, i) => { o.at[i] += v; });
+      o.ret += (r.ret || 0) + (r.rtn || 0); o.cdl += r.cdl || 0; o.sd += r.sd; o.sum += r.sum; r.b.forEach((v, i) => { o.b[i] += v; });
+      o.rtn_n += r.rtn_n || 0; o.rtn_d += r.rtn_d || 0;
+    }
+    o.op = o.pn ? o.po / o.pn : null;
+    o.pkr = o.pk ? o.pko / o.pk : null;
+    o.rr = (o.cdl + o.ret) ? o.ret / (o.cdl + o.ret) : null;
+    o.fa = d3.sum(o.at) ? o.at[0] / d3.sum(o.at) : null;
+    o.avg = o.sd ? o.sum / o.sd : null;
+    o.d24 = d3.sum(o.hb) ? (o.hb[0] + o.hb[1]) / d3.sum(o.hb) : null;
+    o.rtd = o.rtn_n ? o.rtn_d / o.rtn_n : null;
+    return o;
+  }
+  const crow = (c, f, t) => D.hand.filter((r) => r.c === c && r.d >= f && r.d <= t);
+
+  function buildCourierPanel(c) {
+    const k = CKEY[c], id = (s) => k + '-' + s;
+    const P = el('section', 'panel-tab'); P.id = 'p-' + k; P.setAttribute('role', 'tabpanel'); P.setAttribute('aria-labelledby', 't-' + k); P.hidden = true;
+    P.innerHTML = `
+      <header class="c-hero">
+        <div class="c-name"><span class="swatch c-sw"></span><h2></h2><span class="tag" id="${id('state')}"></span></div>
+        <p class="c-role" id="${id('role')}"></p>
+      </header>
+      <section class="sec">
+        <div class="sec-head"><h2>Scorecard</h2><p>Graded against TLC targets for the chosen dates. On target, Watch or Act now. The table below shows the last four months.</p></div>
+        <div class="grades" id="${id('grades')}"></div>
+        <div class="table-wrap"><table id="${id('months')}"></table></div>
+      </section>
+      <div class="figs" id="${id('figs')}"></div>
+      <section class="sec">
+        <div class="sec-head"><h2>Promise and speed</h2><p id="${id('speed-say')}"></p></div>
+        <div class="two">
+          <div class="block"><h3>On promise over time</h3><div class="keys" id="${id('k-op')}"></div><div class="chart" id="${id('ch-op')}"></div></div>
+          <div class="block"><h3>Hours from collection to delivery</h3><div class="chart short" id="${id('ch-hb')}"></div></div>
+        </div>
+        <div class="two">
+          <div class="block"><h3>By city</h3><div class="table-wrap"><table id="${id('groups')}"></table></div></div>
+          <div class="block"><h3>Days from handover to delivery</h3><div class="chart short" id="${id('ch-days')}"></div></div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h2>Pickup discipline</h2><p>Does the courier collect at the scheduled pickup on the day we hand the parcel over? A late collection eats into its own 24 hours.</p></div>
+        <div class="two">
+          <div class="block"><h3>When they collect</h3><div class="chart short" id="${id('ch-ph')}"></div></div>
+          <div class="block"><h3>Collected at the scheduled pickup, over time</h3><div class="chart" id="${id('ch-pk')}"></div></div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h2>Returns and attempts</h2><p id="${id('ret-say')}"></p></div>
+        <div class="two">
+          <div class="block"><h3>Return rate over time</h3><div class="keys" id="${id('k-rr')}"></div><div class="chart" id="${id('ch-rr')}"></div></div>
+          <div class="block"><h3>Why parcels came back</h3><div class="chart" id="${id('ch-why')}"></div></div>
+        </div>
+        <div class="two">
+          <div class="block"><h3>Delivery attempts</h3><div class="chart short" id="${id('ch-at')}"></div></div>
+          <div class="block"><h3>Getting returns back</h3><div class="figs mini" id="${id('ret-figs')}"></div></div>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h2>Live parcels and cities</h2><p id="${id('live-say')}"></p></div>
+        <div class="figs" id="${id('live-figs')}"></div>
+        <div><button class="btn btn-secondary" type="button" id="${id('go-late')}">Open ${c}'s late parcels</button></div>
+        <div class="block"><h3>Busiest cities</h3><p class="note" id="${id('city-say')}"></p><div class="table-wrap"><table id="${id('cities')}"></table></div></div>
+      </section>`;
+    P.querySelector('h2').textContent = c;
+    P.querySelector('.c-sw').style.background = COL[c];
+    P.querySelector('#' + id('go-late')).addEventListener('click', () => { st.lc = c; st.la = 'all'; st.shown = 50; pressSeg($('lf-c'), 'v', st.lc); pressSeg($('lf-a'), 'v', st.la); showTab('late'); window.scrollTo({ top: 0 }); });
+    return P;
+  }
+
+  function gradeChip(k, v, fmt) {
+    const g = grade(k, v), s = el('span', 'gchip' + (g ? ' g-' + g : ''), v == null ? 'n/a' : (fmt || fPct)(v));
+    if (g) s.title = GRADE[g] + ' (' + tgtText(k) + ')';
+    return s;
+  }
+
+  function renderCourier(c, a, first) {
+    const k = CKEY[c], $$ = (s) => $(k + '-' + s);
+    const rows = crow(c, a.f, a.t), srows = crow(c, a.sf, a.sl), o = courierAgg(srows), all = courierAgg(D.hand.filter((r) => r.d >= a.sf && r.d <= a.sl));
+    const n = d3.sum(rows, (r) => r.n), share = a.tot ? n / a.tot : null;
+    // header
+    const sc = (D.scorecard || []).find((r) => r.courier === c) || {};
+    const lastDay = d3.max(D.hand.filter((r) => r.c === c && r.n > 0), (r) => r.d);
+    const paused = lastDay && span(lastDay, MAX) > 4;
+    $$('state').textContent = paused ? 'Paused, last parcel ' + fD(lastDay) : 'Active';
+    $$('state').className = 'tag' + (paused ? ' late' : ' on');
+    $$('role').textContent = (sc.used_for ? sc.used_for + '. ' : '') + fInt(n) + ' parcels handed over ' + fD(a.f) + ' to ' + fD(a.t, true) + (share != null ? ', ' + fPct(share) + ' of all parcels.' : '.');
+    // scorecard
+    const G = [['op', o.op], ['pk', o.pkr], ['rr', o.rr], ['fa', o.fa]];
+    $$('grades').replaceChildren(...G.map(([key, v]) => {
+      const t = TARGETS[key], g = grade(key, v), box = el('div', 'grade' + (g ? ' g-' + g : ''));
+      const vv = el('p', 'grade-v'); vv.append(el('span')); tween(vv.firstChild, v == null ? null : v * 100, (x) => Math.round(x)); vv.append(el('small', null, v == null ? '' : '%'));
+      box.append(el('p', 'grade-l', t.label), vv, el('p', 'grade-g', g ? GRADE[g] : 'Not enough parcels'), el('p', 'grade-t', tgtText(key) + '. ' + t.note));
+      return box;
+    }));
+    const end = a.t.slice(0, 7), months = [];
+    for (let i = 3; i >= 0; i--) { const dd = P(end + '-01'); dd.setUTCMonth(dd.getUTCMonth() - i); months.push(S(dd).slice(0, 7)); }
+    table($$('months'), [['Month'], ['Parcels', 'n'], ['On promise', 'n'], ['Collected on time', 'n'], ['Came back', 'n'], ['First attempt', 'n'], ['Average days', 'n']],
+      months.filter((m) => D.hand.some((x) => x.c === c && x.n > 0 && x.d.slice(0, 7) === m)).map((m) => {
+        const r = D.hand.filter((x) => x.c === c && x.d.slice(0, 7) === m && x.d <= add(MAX, -5)), q = courierAgg(r), part = m === MAX.slice(0, 7);
+        return [td(MON[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4) + (part ? ', so far' : '')), td(fInt(d3.sum(D.hand.filter((x) => x.c === c && x.d.slice(0, 7) === m), (x) => x.n)), 'n'),
+          td(gradeChip('op', q.op), 'n'), td(gradeChip('pk', q.pkr), 'n'), td(gradeChip('rr', q.rr, fPct1), 'n'), td(gradeChip('fa', q.fa), 'n'), td(fDay(q.avg), 'n')];
+      }), { animate: first });
+    // figures
+    const open = OPEN.filter((x) => x.c === c), late = open.filter((x) => lateIn(x, '14'));
+    figs($$('figs'), [
+      { label: 'Parcels handed over', value: n, sub: share == null ? '' : fPct(share) + ' of all parcels' },
+      { label: 'Delivered within 24 h of collection', value: o.d24 == null ? null : o.d24 * 100, fmt: (v) => Math.round(v), unit: '%', sub: 'All couriers ' + fPct(all.d24) },
+      { label: 'Average days to deliver', value: o.avg, fmt: (v) => v.toFixed(1), unit: ' days', sub: 'All couriers ' + fDay(all.avg) + ' days' },
+      { label: 'Late now', value: late.length, alert: late.length > 0, sub: fInt(open.filter((x) => x.st !== 'returning').length) + ' still out' },
+    ]);
+    // promise and speed
+    $$('speed-say').textContent = a.sf <= a.sl ? 'Parcels handed over ' + fD(a.sf) + ' to ' + fD(a.sl, true) + '. The grey line is all couriers together.' : 'This range is too recent; parcels need 5 days to settle.';
+    keys($$('k-op'), [[c, COL[c]], ['All couriers', COL.All]]);
+    const tr = series(hi(a.f, A.track_start), lo(a.t, add(MAX, -5)), (key, rs) => {
+      const x = rs.filter((r) => r.c === c), pn = d3.sum(x, (r) => r.pn || 0), pnA = d3.sum(rs, (r) => r.pn || 0);
+      const pk = d3.sum(x, (r) => r.pk || 0), out = d3.sum(x, (r) => (r.cdl || 0) + r.ret + r.rtn), outA = d3.sum(rs, (r) => (r.cdl || 0) + r.ret + r.rtn);
+      return { k: key, [c]: pn >= 10 ? d3.sum(x, (r) => r.po || 0) / pn : null, ['n_' + c]: pn, All: pnA >= 10 ? d3.sum(rs, (r) => r.po || 0) / pnA : null, n_All: pnA,
+        pk: pk >= 10 ? d3.sum(x, (r) => r.pko || 0) / pk : null, n_pk: pk,
+        rr: out >= 10 ? d3.sum(x, (r) => r.ret + r.rtn) / out : null, n_rr: out, rrA: outA >= 10 ? d3.sum(rs, (r) => r.ret + r.rtn) / outA : null, n_rrA: outA };
+    });
+    const tooRecent = hi(a.f, A.track_start) > lo(a.t, add(MAX, -5));
+    if (tooRecent) ['ch-op', 'ch-pk', 'ch-rr'].forEach((x) => empty($$(x), 'Too recent', 'Parcels need 5 days to settle. Pick a range that ends a week or more ago.'));
+    else {
+      lineChart($$('ch-op'), tr.rows, [c, 'All'], { aria: c + ' share delivered on promise over time', label: tr.bk.label, tipv: (q) => fPct(q.v) + ' on promise, of ' + fInt(q.n) });
+      lineChart($$('ch-pk'), tr.rows.map((r) => ({ k: r.k, [c]: r.pk, ['n_' + c]: r.n_pk })), [c], { aria: c + ' collected at the scheduled pickup over time', label: tr.bk.label, tipv: (q) => fPct(q.v) + ' collected on time, of ' + fInt(q.n) });
+      lineChart($$('ch-rr'), tr.rows.map((r) => ({ k: r.k, [c]: r.rr, ['n_' + c]: r.n_rr, All: r.rrA, n_All: r.n_rrA })), [c, 'All'], { aria: c + ' return rate over time', label: tr.bk.label, domain: [0, 0.3], tipv: (q) => fPct1(q.v) + ' came back, of ' + fInt(q.n) });
+    }
+    const HB = ['Within 12 hours', '12 to 24 hours', '1 to 2 days', '2 to 3 days', 'Over 3 days'], hbT = d3.sum(o.hb);
+    hbars($$('ch-hb'), hbT ? o.hb.map((v, i) => ({ label: HB[i], v: v / hbT, txt: fPct(v / hbT) + ', ' + fInt(v), color: i < 2 ? 'var(--color-accent-deep)' : i === 4 ? 'var(--color-error)' : COL[c] })) : [], { aria: 'Hours from collection to delivery', max: 1, emptyTitle: 'No collection times', emptyText: 'Courier pickup scans are needed for this chart.' });
+    const bT = d3.sum(o.b);
+    hbars($$('ch-days'), bT ? o.b.map((v, i) => ({ label: KLAB[i], v: v / bT, txt: fPct(v / bT) + ', ' + fInt(v), color: i < 2 ? 'var(--color-accent-deep)' : i === 5 ? 'var(--color-error)' : COL[c] })) : [], { aria: 'Days from handover to delivery', max: 1, emptyTitle: 'No delivered parcels', emptyText: 'Nothing settled in this range.' });
+    table($$('groups'), [['City'], ['Parcels', 'n'], ['On promise', 'n'], ['Average days', 'n'], ['Came back', 'n']],
+      A.city_groups.map((g) => { const q = courierAgg(srows.filter((r) => r.g === g)); return [td(g), td(fInt(d3.sum(rows.filter((r) => r.g === g), (r) => r.n)), 'n'), td(q.pn >= 10 ? gradeChip('op', q.op) : el('span', 'dim', q.pn ? fPct(q.op) : 'n/a'), 'n'), td(fDay(q.avg), 'n'), td(q.cdl + q.ret >= 10 ? gradeChip('rr', q.rr, fPct1) : el('span', 'dim', 'n/a'), 'n')]; })
+        .filter((r, i) => d3.sum(rows.filter((x) => x.g === A.city_groups[i]), (x) => x.n) > 0), { animate: first });
+    // pickup
+    const PH = ['Morning, 6 AM to 3 PM', 'Afternoon, 3 to 8 PM', 'Evening, 8 PM to midnight', 'After midnight'], phT = d3.sum(o.ph);
+    hbars($$('ch-ph'), phT ? o.ph.map((v, i) => ({ label: PH[i], v: v / phT, txt: fPct(v / phT) + ', ' + fInt(v), color: COL[c] })) : [], { aria: 'When ' + c + ' collects parcels', max: 1, lw: 190, emptyTitle: 'No pickup scans', emptyText: 'The courier has not reported collection times in this range.' });
+    // returns
+    const rsn = d3.rollups((D.reasons || []).filter((r) => r.c === c && r.d >= a.sf && r.d <= a.sl), (v) => d3.sum(v, (r) => r.n), (r) => r.r).sort((x, y) => y[1] - x[1]);
+    const rT = d3.sum(rsn, (x) => x[1]);
+    hbars($$('ch-why'), rsn.slice(0, 8).map(([r, v]) => ({ label: r, v, txt: fInt(v) + ', ' + fPct(v / rT), color: COL[c] })), { aria: 'Why ' + c + ' parcels came back', lw: 200, emptyTitle: 'No reasons yet', emptyText: 'No returned parcels with a reason in this range.' });
+    const atT = d3.sum(o.at);
+    hbars($$('ch-at'), atT ? ['First attempt', 'Second attempt', 'Third or later'].map((l, i) => ({ label: l, v: o.at[i] / atT, txt: fPct(o.at[i] / atT) + ', ' + fInt(o.at[i]), color: i ? 'var(--color-warn)' : 'var(--color-accent-deep)' })) : [], { aria: c + ' delivery attempts', max: 1 });
+    keys($$('k-rr'), [[c, COL[c]], ['All couriers', COL.All]]);
+    $$('ret-say').textContent = o.rr == null ? 'No settled parcels in this range.' : fPct1(o.rr) + ' of ' + c + ' parcels came back (all couriers ' + fPct1(all.rr) + '). ' + (rsn.length ? 'Main reason: ' + rsn[0][0].toLowerCase() + ', ' + fPct(rsn[0][1] / rT) + '.' : '');
+    const back = open.filter((x) => x.st === 'returning').length;
+    figs($$('ret-figs'), [
+      { label: 'Days from collection to back with us', value: o.rtd, fmt: (v) => v.toFixed(1), unit: ' days', sub: 'All couriers ' + fDay(all.rtd) + ' days' },
+      { label: 'On the way back now', value: back, sub: 'Stock not yet back in the warehouse' },
+    ]);
+    // live parcels and cities
+    const waiting = open.filter((x) => x.st === 'awaiting_pickup');
+    $$('live-say').textContent = 'Live counts as of ' + fD(A.as_of.slice(0, 10)) + ', ' + A.as_of.slice(11) + '. These do not follow the date range.';
+    figs($$('live-figs'), [
+      { label: 'Still out', value: open.length - back, sub: 'Not delivered, not returning' },
+      { label: 'Late now', value: late.length, alert: late.length > 0, sub: 'Past the promise, last 14 days' },
+      { label: 'Booked, not collected', value: waiting.length, alert: waiting.some((x) => x.age >= 2), sub: waiting.length ? 'Oldest ' + fInt(d3.max(waiting, (x) => x.age)) + ' days' : 'Nothing waiting' },
+      { label: 'On the way back', value: back, sub: 'Returning to the warehouse' },
+    ]);
+    const m0 = a.f.slice(0, 7), m1 = a.t.slice(0, 7);
+    const cr = d3.rollups((D.cities || []).filter((r) => r.c === c && r.m >= m0 && r.m <= m1), (v) => ({ n: d3.sum(v, (r) => r.n), pn: d3.sum(v, (r) => r.pn), po: d3.sum(v, (r) => r.po), dl: d3.sum(v, (r) => r.dl), ret: d3.sum(v, (r) => r.ret) }), (r) => r.city)
+      .sort((x, y) => y[1].n - x[1].n).slice(0, 12);
+    $$('city-say').textContent = 'By calendar month, ' + MON[+m0.slice(5) - 1] + (m0 === m1 ? '' : ' to ' + MON[+m1.slice(5) - 1]) + ' ' + m1.slice(0, 4) + ', the 12 busiest cities for ' + c + '.';
+    if (!cr.length) { $$('cities').replaceChildren(); return; }
+    table($$('cities'), [['City'], ['Parcels', 'n'], ['On promise', 'n'], ['Came back', 'n']],
+      cr.map(([city, v]) => [td(city), td(fInt(v.n), 'n'), td(v.pn >= 10 ? gradeChip('op', v.po / v.pn) : el('span', 'dim', v.pn ? fPct(v.po / v.pn) : 'n/a'), 'n'), td(v.dl + v.ret >= 10 ? gradeChip('rr', v.ret / (v.dl + v.ret), fPct1) : el('span', 'dim', 'n/a'), 'n')]), { animate: first });
+  }
+
   // ---------- range bar, tabs ----------
   function placeInd(seg, instant) {
     const ind = seg.querySelector('.seg-ind, .tab-ind'), on = seg.querySelector('[aria-pressed="true"], [aria-selected="true"]');
@@ -786,6 +979,7 @@
     else if (name === 'returns') renderReturns(a, p);
     else if (name === 'pickups') renderPickups(a);
     else if (name === 'costs') renderCosts(a, first);
+    else { const c = CS.find((x) => CKEY[x] === name); if (c) renderCourier(c, a, first); }
   }
   function update() {
     resolveRange();
@@ -818,6 +1012,7 @@
     booted = true;
     if (!D || D.v !== 2 || !D.daily || !D.hand) { failOld(); return; }
     A = D.app[0]; MIN = D.daily.length ? D.daily[0].d : A.hist_start; MAX = A.data_to;
+    if (!$('p-qwqer')) CS.forEach((c) => $('main').insertBefore(buildCourierPanel(c), $('p-late')));
     $('from').min = $('to').min = MIN; $('from').max = $('to').max = MAX;
     cache.clear(); done.clear(); prepOpen(); fresh(); resetCalc();
     readHash();
