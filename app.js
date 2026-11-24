@@ -197,7 +197,7 @@
   const SLA = (c, g) => (c === 'QWQER' ? 1 : g === 'Lahore' ? 2 : g === 'Other cities' ? 4 : 3);
   function prepOpen() {
     const k = D.open_keys || [];
-    OPEN = (D.open || []).map((a) => { const o = {}; k.forEach((n, i) => { o[n] = a[i]; }); o.sla = SLA(o.c, o.g); o.over = o.age - o.sla; o.late = o.over > 0; return o; });
+    OPEN = (D.open || []).map((a) => { const o = {}; k.forEach((n, i) => { o[n] = a[i]; }); o.sla = SLA(o.c, o.g); o.over = o.age - o.sla; o.late = o.over > 0 && o.st !== 'returning'; return o; });
   }
   const lateIn = (o, band) => o.late && (band === 'all' || (band === '7' ? o.age <= 7 : band === '14' ? o.age <= 14 : o.age >= 15));
 
@@ -449,8 +449,51 @@
     return { bk, rows: out.map((b) => fn(b.k, b.rows)) };
   }
 
+  // ---------- the short version (plain English, built from the figures) ----------
+  function say(parts) { const p = el('span', 'brief-t'); parts.forEach((x) => p.append(typeof x === 'string' ? document.createTextNode(x) : el('b', x[1] || null, x[0]))); return p; }
+  const listJoin = (arr) => arr.flatMap((x, i) => [x, i < arr.length - 2 ? ', ' : i === arr.length - 2 ? ' and ' : '']);
+  function renderBrief(a, first) {
+    const by = a.by, items = [];
+    const act = CS.filter((c) => by[c].n > 0).sort((x, y) => by[y].n - by[x].n);
+    items.push(['Volume', [[fInt(a.tot) + ' parcels'], ' went out, about ' + fInt(a.tot / a.ndays) + ' a day. Split: ', ...listJoin(act.map((c) => [c + ' ' + fPct(by[c].share)])), '.'], 'overview']);
+    const sp = CS.filter((c) => by[c].sd >= 20);
+    if (sp.length) {
+      const fast = sp.slice().sort((x, y) => by[y].nd - by[x].nd)[0], slow = sp.slice().sort((x, y) => by[y].avg - by[x].avg)[0];
+      const parts = [[fast], ' is fastest: ', [fPct(by[fast].nd) + ' within a day'], ', ' + fDay(by[fast].avg) + ' days on average.'];
+      if (slow !== fast) parts.push(' ', [slow], ' averages ', [fDay(by[slow].avg) + ' days', by[slow].avg >= 3 ? 'warn' : ''], ' and ' + fPct(by[slow].g5) + ' of its parcels take 5 days or more.');
+      items.push(['Speed', parts, 'speed']);
+    } else items.push(['Speed', ['Too recent to judge speed. Parcels need 5 days to settle; pick a longer range.'], 'speed']);
+    const rl = CS.filter((c) => by[c].rr != null);
+    if (rl.length) {
+      const parts = ['Came back: ', ...listJoin(rl.map((c) => [c + ' ' + fPct1(by[c].rr), by[c].rr >= 0.12 ? 'warn' : ''])), '.'];
+      const why = d3.rollups((D.reasons || []).filter((r) => r.d >= a.sf && r.d <= a.sl), (v) => d3.sum(v, (r) => r.n), (r) => r.r).sort((x, y) => y[1] - x[1]);
+      const tot = d3.sum(why, (w) => w[1]);
+      if (why.length) parts.push(' Main reason: ', [why[0][0].toLowerCase() + ', ' + fPct(why[0][1] / tot)], ' of returns.');
+      items.push(['Returns', parts, 'returns']);
+    } else items.push(['Returns', ['Courier tracking is not connected yet, so returns show last known invoice figures only.'], 'returns']);
+    const late = OPEN.filter((o) => lateIn(o, '14')), lb = d3.rollups(late, (v) => v.length, (o) => o.c).sort((x, y) => y[1] - x[1]);
+    items.push(['Chase today', late.length
+      ? [[fInt(late.length) + ' parcels are late', 'warn'], ' (past the promised day, sent in the last 14 days). Most are with ' + lb[0][0] + ': ' + fInt(lb[0][1]) + '.']
+      : ['Nothing is late right now.'], 'late']);
+    const s9 = a.slots.am9, s7 = a.slots.pm7, plan = D.plan[0];
+    if (s9.avg != null) items.push(['Pickups', ['Morning pickup: ', [Math.round(s9.avg) + ' orders'], ' on an average day, ' + Math.round(s9.p90) + ' on a busy one (planned for ' + plan.plan_9am + '). Evening: ', [Math.round(s7.avg) + ' orders'], ', ' + Math.round(s7.p90) + ' on a busy one (planned for ' + plan.plan_7pm + ').'], 'pickups']);
+    const LINK = { overview: 'See the sheet', speed: 'Speed by city', returns: 'Open returns', late: 'Open the chase list', pickups: 'Open pickups' };
+    $('brief').replaceChildren(...items.map(([k, parts, tab], i) => {
+      const li = el('li', first && !RM.matches ? 'in' : null); if (first) li.style.animationDelay = (i * 60) + 'ms';
+      const go = el('button', 'brief-go', LINK[tab]); go.type = 'button';
+      go.addEventListener('click', () => {
+        if (tab === 'overview') $('sheet').scrollIntoView({ behavior: RM.matches ? 'auto' : 'smooth', block: 'center' });
+        else { showTab(tab); window.scrollTo({ top: 0 }); }
+      });
+      li.append(el('span', 'brief-k', k), say(parts), go);
+      return li;
+    }));
+    $('brief-say').textContent = fD(a.f) + ' to ' + fD(a.t, true) + '. Change the dates above and this updates.';
+  }
+
   // ---------- render: overview ----------
   function renderOverview(a, p, first) {
+    renderBrief(a, first);
     const pl = p ? prevLabel(a) : '';
     const q = a.by.QWQER, x = a.by.PostEx;
     const late14 = OPEN.filter((o) => lateIn(o, '14'));
@@ -462,7 +505,7 @@
     ]);
     keys($('split-keys'), KLAB.map((l, i) => [l, null, KCLS[i]]));
     const openBy = d3.rollup(OPEN, (v) => v.length, (o) => o.c), lateBy = d3.rollup(late14, (v) => v.length, (o) => o.c);
-    table($('sheet'), [['Courier'], ['Parcels', 'n'], ['Share', 'n'], ['Within a day', 'n'], ['Average days', 'n'], ['5 days or more', 'n'], ['Days to deliver'], ['Returned', 'n'], ['Not delivered yet', 'n'], ['Late now', 'n']],
+    table($('sheet'), [['Courier'], ['Parcels sent', 'n'], ['Share', 'n'], ['Delivered within a day', 'n'], ['Average days', 'n'], ['Took 5+ days', 'n'], ['Days to deliver'], ['Came back', 'n'], ['Still out now', 'n'], ['Late now', 'n']],
       CS.map((c) => {
         const o = a.by[c], has = o.n > 0;
         return [
@@ -503,12 +546,16 @@
   function renderLate(first) {
     const L = OPEN.filter((o) => o.late);
     const c7 = L.filter((o) => o.age <= 7).length, c14 = L.filter((o) => o.age > 7 && o.age <= 14).length, c15 = L.filter((o) => o.age >= 15).length;
-    const onTime = OPEN.filter((o) => !o.late).length;
+    const onTime = OPEN.filter((o) => !o.late && o.st !== 'returning').length;
+    const waiting = OPEN.filter((o) => o.st === 'awaiting_pickup' && o.age >= 2).length;
+    const back = OPEN.filter((o) => o.st === 'returning').length;
     figs($('late-figs'), [
       { label: 'Late, up to 7 days old', value: c7, alert: c7 > 0, sub: 'Chase with the courier today' },
       { label: 'Late, 8 to 14 days old', value: c14, alert: c14 > 0, sub: 'Likely stuck or on the way back' },
       { label: 'Late, 15 days or more', value: c15, sub: anyLive() ? 'Check the courier status' : 'Most of these are returns Shopify never recorded' },
-      { label: 'On the way, inside the promise', value: onTime, sub: 'Handed over recently, nothing to do yet' },
+      anyLive()
+        ? { label: 'Booked, not picked up after 2 days', value: waiting, alert: waiting > 0, sub: back ? fInt(back) + ' more are on the way back to us' : 'Courier never collected them' }
+        : { label: 'On the way, inside the promise', value: onTime, sub: 'Handed over recently, nothing to do yet' },
     ]);
     $('late-say').textContent = 'Promise: QWQER 1 day. PostEx and Leopards: Lahore 2 days, Karachi and Islamabad / Pindi 3 days, other cities 4 days. Counted from the day the parcel was handed over, as of ' + fD(A.as_of.slice(0, 10), true) + ', ' + A.as_of.slice(11) + '.';
     const rows = lateList();

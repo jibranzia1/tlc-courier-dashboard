@@ -217,6 +217,27 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
 .js .tip.on { opacity: 1; transform: none; }
 .tip b { display: block; font-size: var(--text-sm); }
 
+/* the short version: the CEO read */
+.brief { display: grid; gap: var(--space-md); padding: var(--space-lg); border-radius: var(--radius-card); background: var(--color-band); color: var(--color-band-ink); }
+.brief-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-xs) var(--space-lg); }
+.brief-head h2 { font-size: var(--text-2xl); }
+.brief-head p { color: var(--color-band-muted); font-size: var(--text-sm); }
+.brief-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.brief-list li { display: grid; grid-template-columns: 9rem minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-xs) var(--space-lg); padding: var(--space-sm) 0; border-top: var(--rule-hair) solid color-mix(in oklab, var(--color-band-ink) 16%, transparent); }
+.brief-list li.in { animation: rowin var(--dur-long) var(--ease-out) both; }
+.brief-k { font-family: var(--font-display); font-weight: var(--display-weight); font-size: var(--text-lg); text-transform: uppercase; color: var(--color-band-muted); }
+.brief-t { font-size: var(--text-lg); line-height: 1.4; max-width: 75ch; }
+.brief-t b { font-weight: 600; color: var(--color-band-ink); background: color-mix(in oklab, var(--color-accent) 22%, transparent); padding: 0 var(--space-3xs); border-radius: 2px; }
+.brief-t b.warn { background: color-mix(in oklab, var(--color-error) 40%, transparent); }
+.brief-go { justify-self: end; min-height: 36px; padding: 0 var(--space-sm); border: var(--rule-hair) solid color-mix(in oklab, var(--color-band-ink) 35%, transparent); border-radius: var(--radius-card); background: none; color: var(--color-band-ink); font-size: var(--text-sm); font-weight: 500; cursor: pointer; white-space: nowrap; transition: background-color var(--dur-short) ease, transform var(--dur-micro) var(--ease-out); }
+.brief-go:hover { background: color-mix(in oklab, var(--color-band-ink) 12%, transparent); }
+.brief-go:active { transform: scale(0.97); }
+.guide { border-top: var(--rule-bar) solid var(--color-rule-2); padding-top: var(--space-md); }
+.guide summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-family: var(--font-display); font-weight: var(--display-weight); font-size: var(--text-xl); text-transform: uppercase; }
+.guide-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-lg) var(--space-xl); margin: var(--space-md) 0 0; }
+.guide-list dt { font-weight: 600; }
+.guide-list dd { margin: var(--space-2xs) 0 0; color: var(--color-muted); font-size: var(--text-sm); }
+
 /* pickups board */
 .board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); background: var(--color-band); color: var(--color-band-ink); border-radius: var(--radius-card); overflow: hidden; }
 .leg { display: grid; gap: var(--space-sm); padding: var(--space-lg); }
@@ -259,6 +280,9 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
   .fresh { display: none; }
   .range-say { margin-left: 0; width: 100%; }
   .calc { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .guide-list { grid-template-columns: minmax(0, 1fr); }
+  .brief-list li { grid-template-columns: minmax(0, 1fr); }
+  .brief-go { justify-self: start; }
 }
 @media (max-width: 40rem) {
   .fig-value { font-size: var(--text-4xl); }
@@ -341,27 +365,45 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
   <main class="container" id="main">
     <!-- OVERVIEW -->
     <section class="panel-tab" id="p-overview" role="tabpanel" aria-labelledby="t-overview">
+      <section class="brief" aria-labelledby="brief-title">
+        <div class="brief-head"><h2 id="brief-title">The short version</h2><p id="brief-say"></p></div>
+        <ol class="brief-list" id="brief"></ol>
+      </section>
       <div class="figs" id="figs"></div>
       <section class="sec">
-        <div class="sec-head"><h2>The results sheet</h2><p>Every parcel handed to a courier in the range. Speed counts parcels handed over at least 5 days before the data ends, so late deliveries have time to show.</p></div>
+        <div class="sec-head"><h2>How each courier is doing</h2><p>One row per courier for the chosen dates. The coloured bar shows how many days deliveries took: green is fast, red is 5 days or more.</p></div>
         <div class="keys" id="split-keys"></div>
         <div class="table-wrap"><table id="sheet"></table></div>
         <p class="note" id="sheet-note"></p>
       </section>
       <section class="sec">
-        <div class="sec-head"><h2>Volume and speed over time</h2><p id="over-say"></p></div>
+        <div class="sec-head"><h2>Trend over the chosen dates</h2><p id="over-say"></p></div>
         <div class="two">
           <div class="block"><h3>Parcels by courier</h3><div class="keys" id="k-vol"></div><div class="chart" id="ch-vol"></div></div>
           <div class="block"><h3>Delivered within a day</h3><div class="keys" id="k-nd"></div><div class="chart" id="ch-nd"></div></div>
         </div>
       </section>
+      <details class="guide">
+        <summary>How to read this dashboard</summary>
+        <dl class="guide-list">
+          <div><dt>Date range</dt><dd>The buttons under the tabs pick the days. Every figure follows them except the late list and the invoice costs, which are always current.</dd></div>
+          <div><dt>Handed over</dt><dd>The day the parcel was packed and booked with the courier in Shopify. Speed is counted from this day.</dd></div>
+          <div><dt>Within a day</dt><dd>Delivered on the day it was handed over or the next day. This is the promise for Lahore.</dd></div>
+          <div><dt>Average days</dt><dd>Days from handover to delivery, for parcels that were delivered.</dd></div>
+          <div><dt>Settled</dt><dd>Speed and returns only count parcels handed over at least 5 days before the data ends, so slow parcels have time to arrive or come back.</dd></div>
+          <div><dt>Returned</dt><dd>Parcels that came back to us or are on the way back, as a share of parcels that reached an outcome. From each courier’s own tracking.</dd></div>
+          <div><dt>Late now</dt><dd>Not delivered and past the promise: QWQER 1 day; PostEx and Leopards 2 days in Lahore, 3 in Karachi and Islamabad / Pindi, 4 elsewhere.</dd></div>
+          <div><dt>Busy day</dt><dd>9 days in 10 have this many orders or fewer. Pickups are planned for it.</dd></div>
+          <div><dt>Green and red tags</dt><dd>The comparison with the same number of days just before the range. Green is better, red is worse.</dd></div>
+        </dl>
+      </details>
     </section>
 
     <!-- LATE -->
     <section class="panel-tab" id="p-late" role="tabpanel" aria-labelledby="t-late" hidden>
       <div class="figs" id="late-figs"></div>
       <section class="sec">
-        <div class="sec-head"><h2>Chase list</h2><p id="late-say"></p></div>
+        <div class="sec-head"><h2>Late parcels to chase</h2><p id="late-say"></p></div>
         <div class="filters">
           <div class="seg" role="group" aria-label="Courier" id="lf-c"><span class="seg-ind" aria-hidden="true"></span>
             <button type="button" data-v="all">All couriers</button><button type="button" data-v="QWQER">QWQER</button><button type="button" data-v="PostEx">PostEx</button><button type="button" data-v="Leopards">Leopards</button></div>
@@ -395,7 +437,7 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
     <!-- RETURNS -->
     <section class="panel-tab" id="p-returns" role="tabpanel" aria-labelledby="t-returns" hidden>
       <section class="sec">
-        <div class="sec-head"><h2>Courier data</h2><p>Returns, attempts and reasons come from each courier’s own tracking. Shopify does not record a parcel coming back.</p></div>
+        <div class="sec-head"><h2>Which couriers report back</h2><p>Returns, attempts and reasons come from each courier’s own tracking. Shopify does not record a parcel coming back.</p></div>
         <div class="connect" id="connect"></div>
       </section>
       <div id="ret-live" class="panel-tab" hidden>

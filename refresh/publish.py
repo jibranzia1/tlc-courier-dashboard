@@ -75,8 +75,13 @@ if os.path.exists(B + "review_static.json"):
 else:
     static = {k: prev[k] for k in STATIC_KEYS}
     json.dump(static, open(B + "review_static.json", "w"))
+import zlib
+def pack_cache(c):
+    return {"z": base64.b64encode(zlib.compress(json.dumps(c, separators=(",", ":")).encode(), 9)).decode()}
+def unpack_cache(o):
+    return json.loads(zlib.decompress(base64.b64decode(o["z"])).decode()) if "z" in o else o
 ctxt, _ = _gh_file("cx.enc.json")
-cache = decrypt_payload(json.loads(ctxt), secret) if ctxt else {}
+cache = unpack_cache(decrypt_payload(json.loads(ctxt), secret)) if ctxt else {}
 
 keys = {k: v for k, v in SECRET.items() if k != "password" and v}
 live = {}
@@ -92,11 +97,11 @@ enc = encrypt_payload(payload, secret)
 assert decrypt_payload(enc, secret)["app"][0]["as_of"] == v2["app"][0]["as_of"]
 stamp = live_old["meta"][0]["refreshed"]
 if keys:
-    _gh_put("cx.enc.json", json.dumps(encrypt_payload(cache, secret)), "Courier tracking cache " + stamp)
+    _gh_put("cx.enc.json", json.dumps(encrypt_payload(pack_cache(cache), secret)), "Courier tracking cache " + stamp)
 _gh_put("data.enc.json", json.dumps(enc), "Data refresh " + stamp)
 
 open_n = len(v2["open"])
-late = sum(1 for o in v2["open"] if o[6] > (1 if o[1] == "QWQER" else 2 if o[4] == "Lahore" else 4 if o[4] == "Other cities" else 3) and o[6] <= 14)
+late = sum(1 for o in v2["open"] if o[8] != "returning" and o[6] > (1 if o[1] == "QWQER" else 2 if o[4] == "Lahore" else 4 if o[4] == "Other cities" else 3) and o[6] <= 14)
 print(json.dumps({"ok": True, "refreshed": stamp, "site": "https://%s.github.io/%s/" % (OWNER, REPO),
                   "days": len(v2["daily"]), "open_parcels": open_n, "late_14d": late,
                   "couriers_live": live, "cx_cached": len(cache), "seconds": round(time.time() - T0)}))
