@@ -17,6 +17,9 @@ TMP = "/tmp/tlc_bill_"
 GH = "github_radii-heir"
 OWNER, REPO = "jibranzia1", "tlc-courier-dashboard"
 BILL_SINCE = "2026-06-01"
+# The courier cache only tracks parcels from July-created orders onward, so June and July are carried from the
+# first full check (24 Nov 2026) instead of being recomputed.
+FREEZE = "2026-08"
 STAGE = globals().get("BILL_STAGE", "orders")
 T1 = time.time()
 
@@ -77,6 +80,7 @@ elif STAGE == "publish":
     d, cache, LI = pd.read_pickle(TMP + "d.pkl"), pd.read_pickle(TMP + "cx.pkl"), pd.read_pickle(TMP + "li.pkl")
     RB, FX = build_frame(d, cache, LI)
     del d, cache, LI; gc.collect()
+    RB = RB[RB.m >= FREEZE]
     old, _ = _gh_file("bill.enc.json")
     keep = decrypt_payload(json.loads(old), pw) if old else None
     now = pd.Timestamp.now(tz="Asia/Karachi")
