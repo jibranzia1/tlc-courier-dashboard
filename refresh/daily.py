@@ -123,3 +123,22 @@ def open_rows(f, now):
                  s=S(x.f_disp).replace("_", " ").capitalize() if x.src == "shopify" else x.st.replace("_", " ").capitalize(),
                  st=x.st, att=None if pd.isna(x.att) else int(x.att), why=x.reason if isinstance(x.reason, str) else None, src=x.src)
             for x in r.itertuples(index=False)]
+
+
+def build_v2(d, now, cx=None, live_couriers=None):
+    """Everything the app filters client-side. Open parcels are packed as arrays to keep the file small."""
+    f = parcel_frame(d, now, cx)
+    o = open_rows(f, now)
+    keys = ["o", "c", "t", "city", "g", "d", "age", "s", "st", "att", "why", "src"]
+    return dict(
+        v=2,
+        app=[dict(hist_start=HIST_START.strftime("%Y-%m-%d"), track_start="2026-08-01",
+                  data_to=(now.normalize() - pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+                  as_of=now.strftime("%Y-%m-%d %H:%M"), city_groups=CITY_GROUPS,
+                  live=live_couriers or {})],
+        daily=daily_rows(d, now),
+        hand=hand_rows(f, now),
+        reasons=reason_rows(f, now),
+        open_keys=keys,
+        open=[[x[k] for k in keys] for x in o],
+    )
