@@ -218,6 +218,8 @@ def refresh_cx(parcels, keys, cache, budget=110):
     for c, g in p.groupby("cour"):
         ts = [t for t in g.sort_values("f_created", ascending=False).tracking.astype(str).unique()
               if not (t in cache and cache[t]["status"] in FINAL)]
+        # never-checked first (newest first), then the ones checked longest ago
+        ts.sort(key=lambda t: (t in cache, cache.get(t, {}).get("checked", "")))
         todo[c] = ts
     live, t0 = {}, time.time()
     jobs = []
