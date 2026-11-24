@@ -185,6 +185,8 @@ def leopards_batch(key, pw, batch):
         elif "cancel" in bl: st = "cancelled"
         elif "pickup request not send" in bl or "booked" == bl: st = "awaiting_pickup"
         else: st = classify(bs)
+        if st in ("in_transit", "awaiting_pickup") and evs and re.match(r"(ready for return|being return|return)", evs[-1][0].lower()):
+            st = "returning"
         pend = [rs for x, rs, _ in evs if x.lower().startswith("pending") and rs]
         rfr = [rs or x.split("-", 1)[-1].strip() for x, rs, _ in evs if x.lower().startswith("ready for return")]
         att = len(pend) + (1 if st == "delivered" else 0) + (1 if rfr and not pend else 0)
