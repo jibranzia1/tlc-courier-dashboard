@@ -85,7 +85,12 @@ def qwqer_one(key, tracking):
     att = max(int(att or 0), n_att + (1 if st == "delivered" else 0))
     comments = [str(c.get("comment") or "").strip() for c in (j.get("comments_data") or []) if c.get("comment")]
     reason = d.get("undelivered_reason") or d.get("cancellation_reason") or (comments[-1] if comments and st != "delivered" else None)
-    return dict(status=st, attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(dl[-1] if dl else None),
+    num = lambda v: None if v is None else float(v)
+    bill = dict(w=num(d.get("weight_input")), amt=num(d.get("order_amount")), tot=num(d.get("total_amount")),
+                wadm=bool(d.get("weight_updated_by_admin")), wcr=bool(d.get("weight_updated_by_cr")), dt=d.get("delivery_type"),
+                nsa=num(d.get("nsa_charges")), peak=bool(d.get("peak_pricing")), disc=num(d.get("discount_amount")),
+                add=num(d.get("additional_amount_charge")), plan=d.get("plan"), booked=d.get("created_at"))
+    return dict(status=st, bill=bill, attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(dl[-1] if dl else None),
                 picked_at=_iso(pk[0] if pk else None), returned_at=_iso(rt[-1] if rt else None),
                 last=str(tl[-1].get("status")) if tl else d.get("status_text"), raw_status=d.get("status_text"))
 
@@ -144,7 +149,11 @@ def _px_record(d):
     for h in hist:
         if code(h) == "0006": returned = _ts(h.get("updatedAt"))
     last = msg(hist[-1]) if hist else ts
-    return dict(status=st, returned_at=_iso(returned), attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(delivered),
+    num = lambda v: None if v in (None, "") else float(v)
+    bill = dict(w=num(d.get("actualWeight")), amt=num(d.get("transactionFee")), tax=num(d.get("transactionTax")),
+                rev=num(d.get("reversalFee")), revtax=num(d.get("reversalTax")), city=d.get("cityName"),
+                booked=d.get("transactionDate"), pickup=d.get("orderPickupDate"))
+    return dict(status=st, bill=bill, returned_at=_iso(returned), attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(delivered),
                 picked_at=_iso(picked), last=last, raw_status=ts)
 
 
@@ -199,7 +208,12 @@ def leopards_batch(key, pw, batch):
         pk = [t for x, _, t in evs if x.lower().startswith("shipment picked")]
         rt = [t for x, _, t in evs if x.lower().startswith("return to sender")]
         last = evs[-1][0] + (" - " + evs[-1][1] if evs[-1][1] and evs[-1][0].lower().startswith("pending") else "") if evs else bs
-        out[cn] = dict(status=st, attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(dl[-1] if dl else None),
+        fl = lambda v: None if v in (None, "") else float(v)
+        bill = dict(wb=fl(p.get("booked_packet_weight")), wa=fl(p.get("arival_dispatch_weight")),
+                    vw=[p.get("booked_packet_vol_weight_l"), p.get("booked_packet_vol_weight_w"), p.get("booked_packet_vol_weight_h")],
+                    pcs=p.get("booked_packet_no_piece"), orig=p.get("origin_city_name"), dest=p.get("destination_city_name"),
+                    booked=p.get("booking_date"))
+        out[cn] = dict(status=st, bill=bill, attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(dl[-1] if dl else None),
                        picked_at=_iso(pk[0] if pk else None), returned_at=_iso(rt[-1] if rt else None),
                        last=re.sub(r"\s+", " ", last), raw_status=bs)
     return out
@@ -224,7 +238,7 @@ def refresh_cx(parcels, keys, cache, budget=110):
     todo = {}
     for c, g in p.groupby("cour"):
         ts = [t for t in g.sort_values("f_created", ascending=False).tracking.astype(str).unique()
-              if not (t in cache and cache[t]["status"] in FINAL
+              if not (t in cache and cache[t]["status"] in FINAL and "bill" in cache[t]
                       and not (cache[t]["status"] == "returned" and "returned_at" not in cache[t]))]
         # never-checked first (newest first), then the ones checked longest ago
         ts.sort(key=lambda t: (t in cache, cache.get(t, {}).get("checked", "")))
