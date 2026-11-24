@@ -137,13 +137,14 @@
 
   // ---------- aggregation ----------
   const within = (r, f, t) => r.d >= f && r.d <= t;
-  function zero() { return { n: 0, cx: 0, src: 0, sn: 0, scx: 0, sdl: 0, scdl: 0, sret: 0, ssrc: 0, sd: 0, sum: 0, b: [0, 0, 0, 0, 0, 0], fa: 0, fad: 0 }; }
+  function zero() { return { n: 0, cx: 0, src: 0, sn: 0, scx: 0, sdl: 0, scdl: 0, sret: 0, ssrc: 0, sd: 0, sum: 0, b: [0, 0, 0, 0, 0, 0], fa: 0, fad: 0, pn: 0, po: 0, am: 0, amn: 0, amo: 0 }; }
   function addRow(o, r, settled) {
     o.n += r.n; o.cx += r.cx; o.src += r.src || 0;
     if (!settled) return;
     o.sn += r.n; o.scx += r.cx; o.sdl += r.dl; o.scdl += r.cdl || 0; o.sret += (r.ret || 0) + (r.rtn || 0); o.ssrc += r.src || 0;
     o.sd += r.sd; o.sum += r.sum; r.b.forEach((v, i) => { o.b[i] += v; });
     o.fa += r.fa || 0; o.fad += r.fad || 0;
+    o.pn += r.pn || 0; o.po += r.po || 0; o.am += r.am || 0; o.amn += r.amn || 0; o.amo += r.amo || 0;
   }
   function finish(o, c) {
     o.nd = o.sd ? (o.b[0] + o.b[1]) / o.sd : null;
@@ -153,6 +154,8 @@
     const out = o.scdl + o.sret;
     o.rr = c && live(c) && o.ssrc && out ? o.sret / out : null;
     o.far = o.fad ? o.fa / o.fad : null;
+    o.op = o.pn ? o.po / o.pn : null;
+    o.amr = o.amn ? o.amo / o.amn : null;
     return o;
   }
   function settleWindow(f, t) { return [hi(f, A.track_start), lo(t, add(MAX, -5))]; }
@@ -197,7 +200,9 @@
   const SLA = (c, g) => (c === 'QWQER' ? 1 : g === 'Lahore' ? 2 : g === 'Other cities' ? 4 : 3);
   function prepOpen() {
     const k = D.open_keys || [];
-    OPEN = (D.open || []).map((a) => { const o = {}; k.forEach((n, i) => { o[n] = a[i]; }); o.sla = SLA(o.c, o.g); o.over = o.age - o.sla; o.late = o.over > 0 && o.st !== 'returning'; return o; });
+    OPEN = (D.open || []).map((a) => { const o = {}; k.forEach((n, i) => { o[n] = a[i]; });
+      if (o.due == null) { o.sla = SLA(o.c, o.g); o.over = o.age - o.sla; }
+      o.late = o.over > 0 && o.st !== 'returning'; return o; });
   }
   const lateIn = (o, band) => o.late && (band === 'all' || (band === '7' ? o.age <= 7 : band === '14' ? o.age <= 14 : o.age >= 15));
 
@@ -458,9 +463,11 @@
     items.push(['Volume', [[fInt(a.tot) + ' parcels'], ' went out, about ' + fInt(a.tot / a.ndays) + ' a day. Split: ', ...listJoin(act.map((c) => [c + ' ' + fPct(by[c].share)])), '.'], 'overview']);
     const sp = CS.filter((c) => by[c].sd >= 20);
     if (sp.length) {
-      const fast = sp.slice().sort((x, y) => by[y].nd - by[x].nd)[0], slow = sp.slice().sort((x, y) => by[y].avg - by[x].avg)[0];
-      const parts = [[fast], ' is fastest: ', [fPct(by[fast].nd) + ' within a day'], ', ' + fDay(by[fast].avg) + ' days on average.'];
+      const fast = sp.slice().sort((x, y) => by[y].op - by[x].op)[0], slow = sp.slice().sort((x, y) => by[y].avg - by[x].avg)[0];
+      const parts = ['On promise (7 PM pickup delivered within 24 hours): ', ...listJoin(sp.map((c) => [c + ' ' + fPct(by[c].op), by[c].op < 0.5 ? 'warn' : ''])), '. ', [fast], ' is fastest at ' + fDay(by[fast].avg) + ' days on average.'];
       if (slow !== fast) parts.push(' ', [slow], ' averages ', [fDay(by[slow].avg) + ' days', by[slow].avg >= 3 ? 'warn' : ''], ' and ' + fPct(by[slow].g5) + ' of its parcels take 5 days or more.');
+      const am = CS.reduce((t, c) => t + by[c].am, 0);
+      parts.push(am ? ' The 9 AM same-day pickup carried ' + fInt(am) + ' parcels, ' + fPct(by.QWQER.amr) + ' delivered the same day.' : ' No parcel went out on a 9 AM same-day pickup.');
       items.push(['Speed', parts, 'speed']);
     } else items.push(['Speed', ['Too recent to judge speed. Parcels need 5 days to settle; pick a longer range.'], 'speed']);
     const rl = CS.filter((c) => by[c].rr != null);
@@ -499,18 +506,18 @@
     const late14 = OPEN.filter((o) => lateIn(o, '14'));
     figs($('figs'), [
       { label: 'Parcels handed to couriers', value: a.tot, sub: fInt(a.tot / a.ndays) + ' a day', delta: p && delta(a.tot, p.tot, 'pct', true, pl) },
-      { label: 'QWQER, delivered within a day', value: q.nd == null ? null : q.nd * 100, fmt: (v) => Math.round(v), unit: '%', sub: q.avg == null ? 'No settled parcels in range' : 'Average ' + fDay(q.avg) + ' days' + (live('QWQER') ? ', same day ' + fPct(q.same) : ''), delta: p && delta(q.nd, p.by.QWQER.nd, 'pts', true, pl) },
-      { label: 'PostEx, average days to deliver', value: x.avg, fmt: (v) => v.toFixed(1), unit: ' days', sub: x.nd == null ? 'No settled parcels in range' : 'Within a day ' + fPct(x.nd), delta: p && delta(x.avg, p.by.PostEx.avg, 'days', false, pl) },
+      { label: 'QWQER, delivered on promise', value: q.op == null ? null : q.op * 100, fmt: (v) => Math.round(v), unit: '%', sub: q.avg == null ? 'No settled parcels in range' : 'Average ' + fDay(q.avg) + ' days to deliver', delta: p && delta(q.op, p.by.QWQER.op, 'pts', true, pl) },
+      { label: 'PostEx, delivered on promise', value: x.op == null ? null : x.op * 100, fmt: (v) => Math.round(v), unit: '%', sub: x.avg == null ? 'No settled parcels in range' : 'Average ' + fDay(x.avg) + ' days to deliver', delta: p && delta(x.op, p.by.PostEx.op, 'pts', true, pl) },
       { label: 'Late now, chase today', value: late14.length, alert: late14.length > 0, sub: 'Past the promised day, handed over in the last 14 days' },
     ]);
     keys($('split-keys'), KLAB.map((l, i) => [l, null, KCLS[i]]));
     const openBy = d3.rollup(OPEN, (v) => v.length, (o) => o.c), lateBy = d3.rollup(late14, (v) => v.length, (o) => o.c);
-    table($('sheet'), [['Courier'], ['Parcels sent', 'n'], ['Share', 'n'], ['Delivered within a day', 'n'], ['Average days', 'n'], ['Took 5+ days', 'n'], ['Days to deliver'], ['Came back', 'n'], ['Still out now', 'n'], ['Late now', 'n']],
+    table($('sheet'), [['Courier'], ['Parcels sent', 'n'], ['Share', 'n'], ['On promise', 'n'], ['Average days', 'n'], ['Took 5+ days', 'n'], ['Days to deliver'], ['Came back', 'n'], ['Still out now', 'n'], ['Late now', 'n']],
       CS.map((c) => {
         const o = a.by[c], has = o.n > 0;
         return [
           td(who(c)), td(fInt(o.n), 'n'), td(has ? fPct(o.share) : 'n/a', 'n' + (has ? '' : ' dim')),
-          td(fPct(o.nd), 'n cell-big' + (o.nd == null ? ' dim' : '')), td(fDay(o.avg), 'n'), td(fPct(o.g5), 'n' + (o.g5 > 0.1 ? ' bad-t' : '')),
+          td(fPct(o.op), 'n cell-big' + (o.op == null ? ' dim' : '')), td(fDay(o.avg), 'n'), td(fPct(o.g5), 'n' + (o.g5 > 0.1 ? ' bad-t' : '')),
           td(o.sd ? split(o.b) : el('span', 'dim small', has ? 'Not settled yet' : 'No parcels in range')),
           td(live(c) ? fPct1(o.rr) : 'Not connected', 'n' + (live(c) ? '' : ' dim')),
           td(fInt(openBy.get(c) || 0), 'n'), td(fInt(lateBy.get(c) || 0), 'n' + ((lateBy.get(c) || 0) ? ' bad-t' : '')),
@@ -530,11 +537,11 @@
       tip: (d) => [(sv.bk.kind === 'week' ? 'Week of ' : '') + sv.bk.label(d.k), ...CS.filter((c) => d[c]).map((c) => c + ': ' + fInt(d[c])), 'Total: ' + fInt(d3.sum(CS, (c) => d[c]))] });
     const nd = series(hi(a.f, A.track_start), lo(a.t, add(MAX, -5)), (k, rows) => {
       const o = { k };
-      CS.forEach((c) => { const r = rows.filter((x) => x.c === c), sd = d3.sum(r, (x) => x.sd), n1 = d3.sum(r, (x) => x.b[0] + x.b[1]); o[c] = sd >= 20 ? n1 / sd : null; o['n_' + c] = sd; });
+      CS.forEach((c) => { const r = rows.filter((x) => x.c === c), pn = d3.sum(r, (x) => x.pn || 0), po = d3.sum(r, (x) => x.po || 0); o[c] = pn >= 20 ? po / pn : null; o['n_' + c] = pn; });
       return o;
     });
     if (hi(a.f, A.track_start) > lo(a.t, add(MAX, -5))) empty($('ch-nd'), 'Too recent', 'Parcels need 5 days to settle. Pick a range that ends a week or more ago.');
-    else lineChart($('ch-nd'), nd.rows, CS, { aria: 'Share of delivered parcels that arrived within a day', label: nd.bk.label, tipv: (p) => fPct(p.v) + ' of ' + fInt(p.n) + ' delivered' });
+    else lineChart($('ch-nd'), nd.rows, CS, { aria: 'Share of parcels delivered on promise', label: nd.bk.label, tipv: (p) => fPct(p.v) + ' on promise, of ' + fInt(p.n) + ' parcels' });
   }
 
   // ---------- render: late ----------
@@ -557,7 +564,7 @@
         ? { label: 'Booked, not picked up after 2 days', value: waiting, alert: waiting > 0, sub: back ? fInt(back) + ' more are on the way back to us' : 'Courier never collected them' }
         : { label: 'On the way, inside the promise', value: onTime, sub: 'Handed over recently, nothing to do yet' },
     ]);
-    $('late-say').textContent = 'Promise: QWQER 1 day. PostEx and Leopards: Lahore 2 days, Karachi and Islamabad / Pindi 3 days, other cities 4 days. Counted from the day the parcel was handed over, as of ' + fD(A.as_of.slice(0, 10), true) + ', ' + A.as_of.slice(11) + '.';
+    $('late-say').textContent = 'Promise: a parcel on the 9 AM pickup (QWQER, Lahore) is delivered the same day; a parcel on the 7 PM pickup (QWQER, PostEx, Leopards) within 24 hours, by 7 PM the next day. The clock starts at the courier’s pickup scan. As of ' + fD(A.as_of.slice(0, 10), true) + ', ' + A.as_of.slice(11) + '.';
     const rows = lateList();
     const shown = rows.slice(0, st.shown);
     if (!rows.length) {
@@ -566,9 +573,9 @@
       const box = el('div', 'empty'); const w = el('div'); w.append(el('b', null, OPEN.some((o) => o.late) ? 'No late parcels match' : 'Nothing is late'), el('span', null, OPEN.some((o) => o.late) ? 'Clear the search or pick another filter.' : 'Every parcel is inside its promise.'));
       box.append(w); c.append(box); r.append(c); e.append(r); $('late-table').append(e);
     } else {
-      table($('late-table'), [['Order'], ['Courier'], ['City'], ['Handed over'], ['Days', 'n'], ['Promise', 'n'], ['Days late', 'n'], ['Status'], ['Tracking']],
+      table($('late-table'), [['Order'], ['Courier'], ['City'], ['Handed over'], ['Days out', 'n'], ['Due by', 'n'], ['Days late', 'n'], ['Status'], ['Tracking']],
         shown.map((o) => [
-          td(o.o, 'mono'), td(who(o.c)), td(o.city || o.g), td(fD(o.d)), td(fInt(o.age), 'n'), td(o.sla + (o.sla === 1 ? ' day' : ' days'), 'n dim'),
+          td(o.o, 'mono'), td(who(o.c)), td(o.city || o.g), td(fD(o.d)), td(fInt(o.age), 'n'), td(o.due ? fD(o.due.slice(0, 10)) + ', ' + (o.b === 'am9' ? 'same day' : '7 PM') : o.sla + ' days', 'n dim'),
           td(fInt(o.over), 'n bad-t'), td(el('span', 'tag' + (o.over > 7 ? ' late' : ''), o.s || 'No update')), td(o.t || 'n/a', 'mono small'),
         ]), { animate: first });
     }
@@ -585,8 +592,8 @@
   $('csv').addEventListener('click', () => {
     const rows = lateList();
     const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const lines = [['Order', 'Courier', 'Tracking', 'City', 'Handed over', 'Days', 'Promise days', 'Days late', 'Status'].join(',')]
-      .concat(rows.map((o) => [o.o, o.c, o.t, o.city, o.d, o.age, o.sla, o.over, o.s].map(esc).join(',')));
+    const lines = [['Order', 'Courier', 'Tracking', 'City', 'Handed over', 'Days out', 'Due by', 'Days late', 'Status'].join(',')]
+      .concat(rows.map((o) => [o.o, o.c, o.t, o.city, o.d, o.age, o.due || '', o.over, o.s].map(esc).join(',')));
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'late-parcels-' + A.as_of.slice(0, 10) + '.csv';
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -595,14 +602,14 @@
   // ---------- render: speed ----------
   function renderSpeed(a, first) {
     $('speed-say').textContent = a.sf <= a.sl
-      ? 'Parcels handed over ' + fD(a.sf) + ' to ' + fD(a.sl, true) + '. Big figure: share delivered within a day. Below it: average days and delivered parcels. Faded cells have under 20 parcels.'
+      ? 'Parcels handed over ' + fD(a.sf) + ' to ' + fD(a.sl, true) + '. Big figure: share delivered on promise (7 PM pickup within 24 hours, 9 AM pickup the same day). Below it: average days to deliver and parcels counted. Faded cells have under 20 parcels.'
       : 'This range is too recent: parcels need 5 days before their speed is final. Pick a range that ends a week or more ago.';
     const G = A.city_groups;
     table($('city-table'), [['Courier'], ...G.map((g) => [g, 'n']), ['All cities', 'n']], CS.map((c) => {
       const cell = (o) => {
-        const t = el('td', 'n' + (o.sd < 20 ? ' dim' : ''));
-        if (!o.sd) { t.textContent = o.n ? 'Not settled' : 'n/a'; return t; }
-        t.append(el('div', 'cell-big', fPct(o.nd)), el('div', 'small dim', fDay(o.avg) + ' days, ' + fInt(o.sd)));
+        const t = el('td', 'n' + (o.pn < 20 ? ' dim' : ''));
+        if (!o.pn) { t.textContent = o.n ? 'Not settled' : 'n/a'; return t; }
+        t.append(el('div', 'cell-big', fPct(o.op)), el('div', 'small dim', fDay(o.avg) + ' days, ' + fInt(o.pn)));
         return t;
       };
       return [td(who(c)), ...G.map((g) => cell(a.city[c][g])), cell(a.by[c])];

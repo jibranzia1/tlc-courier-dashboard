@@ -371,7 +371,7 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
       </section>
       <div class="figs" id="figs"></div>
       <section class="sec">
-        <div class="sec-head"><h2>How each courier is doing</h2><p>One row per courier for the chosen dates. The coloured bar shows how many days deliveries took: green is fast, red is 5 days or more.</p></div>
+        <div class="sec-head"><h2>How each courier is doing</h2><p>One row per courier for the chosen dates. On promise: 9 AM pickup delivered the same day, 7 PM pickup within 24 hours. The coloured bar shows how many days deliveries took: green is fast, red is 5 days or more.</p></div>
         <div class="keys" id="split-keys"></div>
         <div class="table-wrap"><table id="sheet"></table></div>
         <p class="note" id="sheet-note"></p>
@@ -380,7 +380,7 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
         <div class="sec-head"><h2>Trend over the chosen dates</h2><p id="over-say"></p></div>
         <div class="two">
           <div class="block"><h3>Parcels by courier</h3><div class="keys" id="k-vol"></div><div class="chart" id="ch-vol"></div></div>
-          <div class="block"><h3>Delivered within a day</h3><div class="keys" id="k-nd"></div><div class="chart" id="ch-nd"></div></div>
+          <div class="block"><h3>Delivered on promise</h3><div class="keys" id="k-nd"></div><div class="chart" id="ch-nd"></div></div>
         </div>
       </section>
       <details class="guide">
@@ -388,11 +388,11 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
         <dl class="guide-list">
           <div><dt>Date range</dt><dd>The buttons under the tabs pick the days. Every figure follows them except the late list and the invoice costs, which are always current.</dd></div>
           <div><dt>Handed over</dt><dd>The day the parcel was packed and booked with the courier in Shopify. Speed is counted from this day.</dd></div>
-          <div><dt>Within a day</dt><dd>Delivered on the day it was handed over or the next day. This is the promise for Lahore.</dd></div>
+          <div><dt>On promise</dt><dd>A parcel on the 9 AM pickup (QWQER, Lahore) delivered the same day; a parcel on the 7 PM pickup (QWQER, PostEx, Leopards) delivered within 24 hours, by 7 PM the next day. Timed from the courier’s pickup scan.</dd></div>
           <div><dt>Average days</dt><dd>Days from handover to delivery, for parcels that were delivered.</dd></div>
           <div><dt>Settled</dt><dd>Speed and returns only count parcels handed over at least 5 days before the data ends, so slow parcels have time to arrive or come back.</dd></div>
           <div><dt>Returned</dt><dd>Parcels that came back to us or are on the way back, as a share of parcels that reached an outcome. From each courier’s own tracking.</dd></div>
-          <div><dt>Late now</dt><dd>Not delivered and past the promise: QWQER 1 day; PostEx and Leopards 2 days in Lahore, 3 in Karachi and Islamabad / Pindi, 4 elsewhere.</dd></div>
+          <div><dt>Late now</dt><dd>Not delivered and past its promise (same day for the 9 AM pickup, 24 hours for the 7 PM pickup). Parcels already on their way back are not counted.</dd></div>
           <div><dt>Busy day</dt><dd>9 days in 10 have this many orders or fewer. Pickups are planned for it.</dd></div>
           <div><dt>Green and red tags</dt><dd>The comparison with the same number of days just before the range. Green is better, red is worse.</dd></div>
         </dl>
@@ -422,7 +422,7 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
     <!-- SPEED -->
     <section class="panel-tab" id="p-speed" role="tabpanel" aria-labelledby="t-speed" hidden>
       <section class="sec">
-        <div class="sec-head"><h2>Delivered within a day, by city</h2><p id="speed-say"></p></div>
+        <div class="sec-head"><h2>Delivered on promise, by city</h2><p id="speed-say"></p></div>
         <div class="table-wrap"><table id="city-table"></table></div>
       </section>
       <section class="sec">
