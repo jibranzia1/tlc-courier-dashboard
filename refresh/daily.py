@@ -94,17 +94,20 @@ def parcel_frame(d, now, cx=None):
 def promise(f, now):
     """The delivery promise: QWQER parcels on the 9 AM pickup are delivered the same day;
     every 7 PM pickup (QWQER, PostEx, Leopards) is delivered within 24 hours, by 7 PM the next day.
-    The clock starts at the courier's pickup scan (scans before 5 AM belong to the previous evening's pickup);
-    without a scan it starts at the 7 PM pickup on the handover day."""
+    The clock starts at the scheduled pickup on the day the parcel is handed over (booked in Shopify): 9 AM for QWQER parcels
+    scanned that morning, otherwise 7 PM. A courier that collects later than that still owns the 24 hours.
+    Pickup scans before 5 AM belong to the previous evening's pickup."""
     pat = pd.to_datetime(f.pat, errors="coerce")
     if getattr(pat.dt, "tz", None) is None: pat = pat.dt.tz_localize("Asia/Karachi")
     has = pat.notna()
-    day = f.hd.copy()
-    day[has] = (pat[has] - pd.Timedelta(hours=5)).dt.normalize()
-    am = has & f.cour.eq("QWQER") & pat.dt.hour.between(6, 14)
+    scan_day = f.hd.copy()
+    scan_day[has] = (pat[has] - pd.Timedelta(hours=5)).dt.normalize()
+    # the clock starts at the scheduled pickup on the handover day; a courier that collects late uses up its own 24 hours
+    day = f.hd
+    am = has & f.cour.eq("QWQER") & pat.dt.hour.between(6, 14) & (scan_day == f.hd)
     f["batch"] = np.where(am, "am9", "pm7")
     f["pk_has"] = has
-    f["pk_ok"] = has & (day <= f.hd)                       # collected at the pickup on the handover day (or the 9 AM one)
+    f["pk_ok"] = has & (scan_day <= f.hd)                  # collected at the pickup on the handover day (or the 9 AM one)
     h = pat.dt.hour
     f["pk_slot"] = np.select([~has, h.between(6, 14), h.between(15, 19), h.between(20, 23)], [-1, 0, 1, 2], 3)
     f["due"] = (day + pd.Timedelta(days=1, hours=19)).where(~am, day + pd.Timedelta(hours=23, minutes=59, seconds=59))
