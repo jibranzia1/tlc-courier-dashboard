@@ -65,7 +65,7 @@ def parcel_frame(d, now, cx=None):
     f["cxl"] = f.f_disp.eq("CANCELED")
     f["st"] = np.where(f.dl, "delivered", np.where(f.cxl, "cancelled", "open"))
     f["att"] = np.nan; f["reason"] = None; f["src"] = "shopify"; f["last"] = None
-    f["dat"] = f.f_delivered; f["pat"] = pd.NaT
+    f["dat"] = f.f_delivered; f["pat"] = pd.NaT; f["rat"] = pd.NaT
     if cx is not None and len(cx):
         c = cx.set_index("tracking")
         hit = f.tracking.isin(c.index)
@@ -78,6 +78,7 @@ def parcel_frame(d, now, cx=None):
         tz = lambda v: pd.to_datetime(pd.Series(v, index=f.index[hit]), utc=True, errors="coerce").dt.tz_convert("Asia/Karachi")
         f.loc[hit, "dat"] = tz(c.loc[t, "delivered_at"].values)
         f.loc[hit, "pat"] = tz(c.loc[t, "picked_at"].values) if "picked_at" in c.columns else pd.NaT
+        if "returned_at" in c.columns: f.loc[hit, "rat"] = tz(c.loc[t, "returned_at"].values)
         dd = pd.Series(c.loc[t, "delivered_at"].values, index=f.index[hit])
         dd = pd.to_datetime(dd, utc=True, errors="coerce").dt.tz_convert("Asia/Karachi").dt.normalize()
         ok = dd.notna()
@@ -102,12 +103,21 @@ def promise(f, now):
     day[has] = (pat[has] - pd.Timedelta(hours=5)).dt.normalize()
     am = has & f.cour.eq("QWQER") & pat.dt.hour.between(6, 14)
     f["batch"] = np.where(am, "am9", "pm7")
+    f["pk_has"] = has
+    f["pk_ok"] = has & (day <= f.hd)                       # collected at the pickup on the handover day (or the 9 AM one)
+    h = pat.dt.hour
+    f["pk_slot"] = np.select([~has, h.between(6, 14), h.between(15, 19), h.between(20, 23)], [-1, 0, 1, 2], 3)
     f["due"] = (day + pd.Timedelta(days=1, hours=19)).where(~am, day + pd.Timedelta(hours=23, minutes=59, seconds=59))
     dat = pd.to_datetime(f.dat, errors="coerce")
     if getattr(dat.dt, "tz", None) is None: dat = dat.dt.tz_localize("Asia/Karachi")
     f["ontime"] = f.st.eq("delivered") & dat.notna() & (dat <= f.due)
     # judged: delivered, or still out after its promise passed (returns and cancellations are not judged)
     f["judged"] = f.st.eq("delivered") | (f.st.isin(["open", "in_transit", "awaiting_pickup"]) & (f.due < now))
+    hrs = (dat - pat).dt.total_seconds() / 3600
+    f["h2d"] = hrs.where(f.st.eq("delivered") & has & dat.notna() & (hrs >= 0))
+    rat = pd.to_datetime(f.rat, errors="coerce")
+    if getattr(rat.dt, "tz", None) is None: rat = rat.dt.tz_localize("Asia/Karachi")
+    f["rtd"] = ((rat - pat).dt.total_seconds() / 86400).where(f.st.eq("returned") & has & rat.notna())
     return f
 
 
@@ -126,13 +136,39 @@ def hand_rows(f, now):
                    b=[int((days == k).sum()) for k in range(5)] + [int((days >= 5).sum())],
                    src=int((r.src == "courier").sum()),
                    pn=int(r.judged.sum()), po=int(r.ontime.sum()),
-                   am=int((r.batch == "am9").sum()), amo=int(((r.batch == "am9") & r.ontime).sum()), amn=int(((r.batch == "am9") & r.judged).sum()))
+                   am=int((r.batch == "am9").sum()), amo=int(((r.batch == "am9") & r.ontime).sum()), amn=int(((r.batch == "am9") & r.judged).sum()),
+                   pk=int(r.pk_has.sum()), pko=int(r.pk_ok.sum()), ph=[int((r.pk_slot == k).sum()) for k in range(4)])
+        hh = r.h2d.dropna()
+        if len(hh):
+            row["hb"] = [int((hh <= 12).sum()), int(((hh > 12) & (hh <= 24)).sum()), int(((hh > 24) & (hh <= 48)).sum()),
+                         int(((hh > 48) & (hh <= 72)).sum()), int((hh > 72).sum())]
+        out_ = r[r.st.isin(["delivered", "returned"]) & r.att.notna()]
+        if len(out_):
+            row["at"] = [int((out_.att <= 1).sum()), int((out_.att == 2).sum()), int((out_.att >= 3).sum())]
+        rd = r.rtd.dropna()
+        if len(rd):
+            row["rtn_n"] = int(len(rd)); row["rtn_d"] = round(float(rd.clip(lower=0).sum()), 1)
         a = r.att.dropna()
         if len(a):
             row["fa"] = int(((r.st == "delivered") & (r.att <= 1)).sum())
             row["att_n"] = int(len(a))
             row["fad"] = int(((r.st == "delivered") & r.att.notna()).sum())
         out.append(row)
+    return out
+
+
+def city_rows(f, now, top=25):
+    """Monthly rows per courier and city, for the busiest cities of each courier."""
+    end = now.normalize()
+    g = f[f.hd < end].copy()
+    g["cty"] = g.city.fillna("").str.strip().str.title().replace({"Rawalpindi Cantt": "Rawalpindi", "": "Unknown"})
+    g["m"] = g.hd.dt.strftime("%Y-%m")
+    out = []
+    for c, gc in g.groupby("cour"):
+        keep = gc.cty.value_counts().head(top).index
+        for (m, cty), r in gc[gc.cty.isin(keep)].groupby(["m", "cty"]):
+            out.append(dict(m=m, c=c, city=cty, n=int(len(r)), pn=int(r.judged.sum()), po=int(r.ontime.sum()),
+                            dl=int((r.st == "delivered").sum()), ret=int(r.st.isin(["returned", "returning"]).sum())))
     return out
 
 
@@ -175,6 +211,7 @@ def build_v2(d, now, cx=None, live_couriers=None):
         daily=daily_rows(d, now),
         hand=hand_rows(f, now),
         reasons=reason_rows(f, now),
+        cities=city_rows(f, now),
         open_keys=keys,
         open=[[x[k] for k in keys] for x in o],
     )
