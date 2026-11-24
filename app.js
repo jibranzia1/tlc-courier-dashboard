@@ -14,14 +14,14 @@
 
   // ---------- decrypt ----------
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-  async function fetchEnc() {
+  async function fetchEnc(file) {
     let r;
-    try { r = await fetch('data.enc.json?t=' + Date.now(), { cache: 'no-store' }); } catch (e) { throw new Error('fetch'); }
+    try { r = await fetch((file || 'data.enc.json') + '?t=' + Date.now(), { cache: 'no-store' }); } catch (e) { throw new Error('fetch'); }
     if (!r.ok) throw new Error('fetch');
     return r.json();
   }
-  async function decrypt(pw) {
-    const e = await fetchEnc();
+  async function decrypt(pw, file) {
+    const e = await fetchEnc(file);
     const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
     const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64(e.salt), iterations: e.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
     let plain;
@@ -29,13 +29,14 @@
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
-  let D = null, A = null, OPEN = [], MIN = null, MAX = null, booted = false;
+  let D = null, A = null, OPEN = [], MIN = null, MAX = null, booted = false, PW = null;
 
   async function unlock(pw, remember) {
     const go = $('go');
     go.disabled = true; go.textContent = 'Opening'; $('prog').classList.add('on'); $('err').textContent = '';
     try {
       D = await decrypt(pw);
+      PW = pw;
       if (remember) store.set(pw); else store.del();
       const lock = $('lock');
       $('app').hidden = false;
@@ -56,7 +57,7 @@
   $('unlock').addEventListener('submit', (e) => { e.preventDefault(); if ($('pw').value) unlock($('pw').value, $('remember').checked); else { $('err').textContent = 'Enter the password.'; $('pw').focus(); } });
   $('pw').addEventListener('input', () => { $('pw').removeAttribute('aria-invalid'); $('err').textContent = ''; });
   $('lockout').addEventListener('click', () => {
-    store.del(); D = null; booted = false;
+    store.del(); D = null; booted = false; PW = null; BILL = null; billLoading = null; BL = null; FX = null;
     $('app').hidden = true; $('lock').hidden = false; $('pw').value = ''; $('pw').focus();
   });
 
@@ -111,8 +112,8 @@
   };
 
   // ---------- state ----------
-  const st = { tab: 'overview', p: '60', from: null, to: null, lc: 'all', la: '14', lq: '', shown: 50 };
-  const TABS = ['overview', 'qwqer', 'postex', 'leopards', 'late', 'speed', 'returns', 'pickups', 'costs'];
+  const st = { tab: 'overview', p: '60', from: null, to: null, lc: 'all', la: '14', lq: '', shown: 50, bc: 'all', bk: 'claim', blc: 'all', bq: '', bshown: 50, fs: 'missing', fshown: 50 };
+  const TABS = ['overview', 'qwqer', 'postex', 'leopards', 'late', 'speed', 'returns', 'pickups', 'costs', 'bills'];
   function readHash() {
     const h = new URLSearchParams(location.hash.slice(1));
     if (TABS.includes(h.get('t'))) st.tab = h.get('t');
@@ -732,6 +733,153 @@
       acts.map((r) => [td(r.action), td(fRs(r.saving), 'n cell-big'), td(r.owner), td(r.note, 'small dim')]).concat([[td(el('b', null, 'Total')), td(fRs(d3.sum(acts, (r) => r.saving)), 'n cell-big'), td(''), td('')]]), { animate: first });
   }
 
+  // ---------- render: bills ----------
+  // The bill check (weights and rates, Jun onwards) lives in its own encrypted file and opens on first visit.
+  let BILL = null, billLoading = null;
+  function loadBill() {
+    if (BILL) return Promise.resolve(BILL);
+    if (window.TLC_PREVIEW_BILL) { BILL = window.TLC_PREVIEW_BILL; return Promise.resolve(BILL); }
+    if (!billLoading) billLoading = decrypt(PW, 'bill.enc.json').then((b) => { BILL = b; return b; }).catch((e) => { billLoading = null; throw e; });
+    return billLoading;
+  }
+  const BCS = ['QWQER', 'PostEx', 'Leopards'];
+  const fMonth = (m) => d3.timeFormat('%b\u00a0%Y')(new Date(m + '-01T00:00:00'));
+  const BILL_PARTS = [['hb-rel', 'rel', 'Release', 'var(--color-accent-deep)'], ['hb-cl', 'cl', 'Weight claim', 'var(--color-error)'], ['hb-bk', 'bk', 'Bulky, to confirm', 'var(--color-warn)'], ['hb-rt', 'rt', 'Rate, to confirm', 'var(--color-ink-2)']];
+  function billSum(rows) {
+    const o = { n: 0, chk: 0, billed: 0, cl_n: 0, cl: 0, bk_n: 0, bk: 0, rt: 0, hold: 0, rel: 0, p24: 0, lh_n: 0, lh: 0, kg_n: 0, kg: 0, odd_n: 0, odd: 0, typo: 0 };
+    rows.forEach((r) => { for (const k in o) o[k] += r[k] || 0; });
+    return o;
+  }
+  function hbar(o) {
+    const s = el('div', 'hbar'), tot = o.billed || 1;
+    s.setAttribute('role', 'img');
+    s.setAttribute('aria-label', BILL_PARTS.map(([, k, l]) => l + ' ' + fPct(o[k] / tot)).join(', '));
+    BILL_PARTS.forEach(([c, k]) => { const i = el('i', c); i.dataset.g = o[k] / tot; s.append(i); });
+    s.addEventListener('pointermove', (ev) => tip.show(['Of ' + fRs(o.billed) + ' billed', ...BILL_PARTS.map(([, k, l]) => l + ': ' + fRs(o[k]) + ' (' + fPct(o[k] / tot) + ')')], ev));
+    s.addEventListener('pointerleave', tip.hide);
+    return s;
+  }
+  function growBars(root) {
+    const go = () => root.querySelectorAll('.hbar i').forEach((x) => { x.style.flexGrow = x.dataset.g; });
+    if (RM.matches) go(); else requestAnimationFrame(() => requestAnimationFrame(go));
+  }
+  const billRow = (label, o, bar) => [td(label), td(fRs(o.billed), 'n'), td(fRs(o.rel), 'n'), td(fRs(o.hold), 'n cell-big'),
+    td(o.cl ? fRs(o.cl) + ' (' + fInt(o.cl_n) + ')' : '-', 'n'), td(o.bk ? fRs(o.bk) + ' (' + fInt(o.bk_n) + ')' : '-', 'n'), td(o.rt ? fRs(o.rt) : '-', 'n')].concat(bar ? [td(hbar(o))] : []);
+  const BILL_HEAD = [['Courier'], ['Billed', 'n'], ['Release now', 'n'], ['Hold', 'n'], ['Weight claim (parcels)', 'n'], ['Bulky, to confirm (parcels)', 'n'], ['Rate, to confirm', 'n'], ['Share of the bill']];
+  const objs = (keys, rows) => rows.map((r) => Object.fromEntries(keys.map((k, i) => [k, r[i]])));
+  let BL = null, FX = null;
+  function billLines() {
+    const q = st.bq.trim().toLowerCase();
+    return BL.filter((r) => r.kind === st.bk && (st.blc === 'all' || r.c === st.blc)
+      && (!q || [r.o, r.t, r.city, r.items].some((v) => String(v || '').toLowerCase().includes(q))))
+      .sort((a, b) => (b.typo - a.typo) || (b.over - a.over));
+  }
+  function fixRows() { return FX.filter((r) => st.fs === 'all' || r.status === st.fs); }
+  const FIXLAB = { missing: 'Missing', off: 'Looks wrong', ok: 'Looks right', few: 'Too few parcels' };
+  const kg = (v) => (v == null ? '-' : v.toFixed(2) + ' kg');
+
+  function renderBills(first) {
+    if (!BILL) {
+      $('bill-say').textContent = 'Opening the bill check.';
+      loadBill().then(() => { if (st.tab === 'bills') renderBills(true); })
+        .catch(() => { $('bill-say').textContent = 'The bill check could not be opened. It is written at the next refresh, 11 AM or 6 PM; reload the page after that.'; });
+      return;
+    }
+    const B = BILL, M = B.months;
+    if (!BL) { BL = objs(B.line_keys, B.lines); FX = objs(B.fix_keys, B.fix); }
+    const all = billSum(M), months = [...new Set(M.map((r) => r.m))].sort();
+    const span = fMonth(months[0]) + ' to ' + fMonth(months[months.length - 1]);
+    $('bill-count').textContent = all.cl_n ? fInt(all.cl_n) : '';
+    figs($('bill-figs'), [
+      { label: 'Billed, ' + span, value: all.billed, fmt: fInt, unit: ' Rs', sub: fInt(all.n) + ' parcels, before GST' },
+      { label: 'Release now', value: all.rel, fmt: fInt, unit: ' Rs', sub: fPct(all.rel / all.billed) + ' of the bill checks out' },
+      { label: 'Hold', value: all.hold, fmt: fInt, unit: ' Rs', hot: true, sub: fRs(all.hold * 1.16) + ' with 16% GST' },
+      { label: 'Weight claims to send', value: all.cl, fmt: fInt, unit: ' Rs', alert: all.cl > 0, sub: fInt(all.cl_n) + ' parcels billed in a dearer weight slab' },
+    ]);
+    $('bill-say').textContent = 'Every courier parcel from ' + span + ', checked against our product weights and the rate cards. '
+      + fInt(all.chk) + ' of ' + fInt(all.n) + ' parcels could be weight-checked. Updated ' + fD(B.as_of.slice(0, 10), true) + ', ' + d3.timeFormat('%-I:%M %p')(new Date('2000-01-01T' + B.as_of.slice(11, 16) + ':00')) + '. This tab does not follow the date range.';
+    const rows = BCS.filter((c) => M.some((r) => r.c === c)).map((c) => {
+      const lab = el('span'); lab.append(whoLink(c)); if (c === 'Leopards') lab.append(document.createTextNode(' '), el('span', 'tag', 'Estimated'));
+      return billRow(lab, billSum(M.filter((r) => r.c === c)), true);
+    });
+    rows.push(billRow(el('b', null, 'Total'), all, true));
+    table($('bill-table'), BILL_HEAD, rows, { animate: first });
+    keys($('k-bill'), BILL_PARTS.map(([, , l, col]) => [l, col]));
+    const qi = B.qwqer_invoice;
+    $('bill-note').textContent = (qi ? 'QWQER’s ' + fMonth(qi.month) + ' invoice matches its API to the rupee on ' + fInt(qi.matched) + ' of ' + fInt(qi.lines) + ' lines. ' : '')
+      + 'Leopards gives no charge in its API, so its amounts are estimated from the tariff; match them to its invoices before paying. '
+      + 'Parcels that could not be weight-checked (split orders, products with too few single-item parcels) are released when their rate matches the card.';
+    // month by month
+    const mm = M.filter((r) => st.bc === 'all' || r.c === st.bc);
+    const mrows = months.filter((m) => mm.some((r) => r.m === m)).map((m) => billRow(fMonth(m), billSum(mm.filter((r) => r.m === m))));
+    mrows.push(billRow(el('b', null, 'Total'), billSum(mm)));
+    table($('bill-month'), [['Month']].concat(BILL_HEAD.slice(1, -1)), mrows, { animate: first });
+    pressSeg($('bf-c'), 'v', st.bc);
+    // PostEx rate questions
+    const px = billSum(M.filter((r) => r.c === 'PostEx'));
+    $('bill-px').closest('.sec').hidden = !px.n;
+    table($('bill-px'), [['Question'], ['Parcels', 'n'], ['Above the proposal', 'n'], ['Ask PostEx']], [
+      [td('24% added to every proposal rate'), td(fInt(px.n), 'n'), td(fRs(px.p24), 'n cell-big'), td('Is it in the signed contract? The proposal has 0% fuel.', 'small dim')],
+      [td('Lahore billed at the intercity rate'), td(fInt(px.lh_n), 'n'), td(fRs(px.lh), 'n cell-big'), td('Which rate was agreed for within Lahore: Rs 130 or 200/220?', 'small dim')],
+      [td('Billed per kilogram, not flat to 4 kg'), td(fInt(px.kg_n), 'n'), td(fRs(px.kg), 'n cell-big'), td('Why these parcels left the flat rate.', 'small dim')],
+      [td('Fees that match no rate'), td(fInt(px.odd_n), 'n'), td(fRs(px.odd), 'n cell-big'), td('A breakdown of each fee. Held in full.', 'small dim')],
+    ], { animate: first });
+    renderBillLines(); renderFix();
+    $('bill-how').replaceChildren(...[
+      ['Our weight', 'Shopify weights are blank or a few grams for most products, so each product’s normal packed weight is the median weight the couriers recorded for parcels holding only that item (3 or more such parcels).'],
+      ['Flagged', 'Only when a parcel was billed in a dearer weight slab than our weight plus ' + B.tol + ' kg.'],
+      ['Weight claim', 'Flat, dense items where size cannot explain the extra weight. Send these lines to the courier for credit.'],
+      ['Bulky, to confirm', 'Pillows, fillers, duvets, toppers, quilted items, mattress protectors, blankets. The contract may allow billing by size, so they are held, not claimed. “Check first” marks parcels billed at 5 times our weight or more, which look like typing errors.'],
+      ['Rate, to confirm', 'PostEx charges above its proposal rates. Held until the contract is checked.'],
+      ['Limit', 'Our weight comes from the couriers’ own scales, so an across-the-board over-weighing would not show. Real weights in Shopify close this.'],
+    ].concat((B.notes || []).map((n, i) => [i === 0 ? 'Rate cards' : '', n])).map(([t, d]) => { const w = el('div'); w.append(el('dt', null, t), el('dd', null, d)); return w; }));
+    growBars($('p-bills'));
+    requestAnimationFrame(() => ['bf-c', 'bl-k', 'bl-c', 'fx-s'].forEach((id) => placeInd($(id), true)));
+  }
+  function renderBillLines() {
+    const rows = billLines(), shown = rows.slice(0, st.bshown);
+    const tot = d3.sum(rows, (r) => r.over);
+    $('bl-say').textContent = fInt(rows.length) + (st.bk === 'claim' ? ' parcels to claim, ' : ' bulky parcels to confirm, ') + fRs(tot) + ' over the contract charge at our weight. Biggest first.';
+    table($('bill-lines'), [['Order'], ['Courier'], ['Handed over'], ['City'], ['Items'], ['Our weight', 'n'], ['Courier weight', 'n'], ['Billed', 'n'], ['Should be', 'n'], ['Over', 'n']],
+      shown.map((r) => {
+        const o = el('span'); o.append(document.createTextNode(r.o)); if (r.typo) o.append(document.createTextNode(' '), el('span', 'tag warn', 'Check first'));
+        return [td(o), td(who(r.c)), td(fD(r.d, true), 'small'), td(r.city, 'small'), td(r.items, 'small dim'), td(kg(r.ref), 'n'), td(kg(r.cw), 'n'),
+          td(fRs(r.billed), 'n'), td(r.should == null ? '-' : fRs(r.should), 'n'), td(fRs(r.over), 'n cell-big')];
+      }));
+    $('bl-more').hidden = rows.length <= st.bshown;
+    pressSeg($('bl-k'), 'v', st.bk); pressSeg($('bl-c'), 'v', st.blc);
+  }
+  function renderFix() {
+    const rows = fixRows(), shown = rows.slice(0, st.fshown), fc = BILL.fix_counts || {};
+    $('fx-say').textContent = fInt(fc.missing || 0) + ' of ' + fInt(BILL.fix_total || 0) + ' products sold have no real weight in Shopify, and ' + fInt(fc.off || 0)
+      + ' differ from their parcels by more than 30%. Most-ordered first; weigh one packed unit and enter it in Shopify. The suggested weight comes from the couriers’ scales.';
+    table($('bill-fix'), [['Product'], ['Size'], ['SKU'], ['Orders', 'n'], ['Suggested', 'n'], ['Shopify now', 'n'], ['Status']],
+      shown.map((r) => [td(r.title), td(r.size, 'small'), td(r.sku, 'small dim mono'), td(fInt(r.orders), 'n'), td(kg(r.suggested_kg), 'n cell-big'),
+        td(r.shopify_kg == null ? '-' : r.shopify_kg.toFixed(3) + ' kg', 'n'), td(el('span', 'tag' + (r.status === 'missing' ? ' late' : r.status === 'off' ? ' warn' : ''), FIXLAB[r.status] || r.status))]));
+    $('fx-more').hidden = rows.length <= st.fshown;
+    pressSeg($('fx-s'), 'v', st.fs);
+  }
+  const segOn = (id, fn) => $(id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && BILL) fn(b.dataset.v); });
+  segOn('bf-c', (v) => { st.bc = v; renderBills(false); });
+  segOn('bl-k', (v) => { st.bk = v; st.bshown = 50; renderBillLines(); });
+  segOn('bl-c', (v) => { st.blc = v; st.bshown = 50; renderBillLines(); });
+  segOn('fx-s', (v) => { st.fs = v; st.fshown = 50; renderFix(); });
+  $('bl-q').addEventListener('input', () => { st.bq = $('bl-q').value; st.bshown = 50; if (BILL) renderBillLines(); });
+  $('bl-more').addEventListener('click', () => { st.bshown += 50; renderBillLines(); });
+  $('fx-more').addEventListener('click', () => { st.fshown += 50; renderFix(); });
+  function csvDown(name, head, rows) {
+    const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const blob = new Blob(['﻿' + [head.join(',')].concat(rows.map((r) => r.map(esc).join(','))).join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name + '-' + BILL.as_of.slice(0, 10) + '.csv';
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  $('bl-csv').addEventListener('click', () => { if (!BILL) return; csvDown(st.bk === 'claim' ? 'weight-claims' : 'bulky-to-confirm',
+    ['Order', 'Courier', 'Tracking', 'Handed over', 'City', 'Items', 'Our weight kg', 'Courier weight kg', 'Billed Rs', 'Should be Rs', 'Over Rs', 'Check first'],
+    billLines().map((r) => [r.o, r.c, r.t, r.d, r.city, r.items, r.ref, r.cw, r.billed, r.should, r.over, r.typo ? 'yes' : ''])); });
+  $('fx-csv').addEventListener('click', () => { if (!BILL) return; csvDown('product-weights',
+    ['SKU', 'Product', 'Size', 'Orders', 'Suggested kg', 'Shopify kg', 'Status'],
+    fixRows().map((r) => [r.sku, r.title, r.size, r.orders, r.suggested_kg, r.shopify_kg, FIXLAB[r.status] || r.status])); });
+
   // ---------- courier tabs ----------
   const CKEY = { QWQER: 'qwqer', PostEx: 'postex', Leopards: 'leopards' };
   COL.All = 'var(--color-muted)';
@@ -979,6 +1127,7 @@
     else if (name === 'returns') renderReturns(a, p);
     else if (name === 'pickups') renderPickups(a);
     else if (name === 'costs') renderCosts(a, first);
+    else if (name === 'bills') renderBills(first);
     else { const c = CS.find((x) => CKEY[x] === name); if (c) renderCourier(c, a, first); }
   }
   function update() {

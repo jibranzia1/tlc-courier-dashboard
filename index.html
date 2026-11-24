@@ -187,6 +187,10 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
 .tag.late { background: var(--color-error-soft); color: var(--color-error); }
 
 /* split bar: the signature */
+.hbar { display: flex; height: 10px; width: 100%; min-width: 140px; border-radius: 2px; overflow: hidden; background: var(--color-paper-3); }
+.hbar i { display: block; height: 100%; flex-grow: 0; transition: flex-grow var(--dur-long) var(--ease-out); }
+.hb-rel { background: var(--color-accent-deep); } .hb-cl { background: var(--color-error); } .hb-bk { background: var(--color-warn); } .hb-rt { background: var(--color-ink-2); }
+.tag.warn { background: var(--color-warn-soft); color: var(--color-ink); }
 .split { display: flex; height: 14px; width: 100%; min-width: 160px; border-radius: 2px; overflow: hidden; background: var(--color-paper-3); }
 .split i { display: block; height: 100%; transition: flex-grow var(--dur-long) var(--ease-out); }
 .k0 { background: var(--color-accent-deep); }
@@ -375,6 +379,7 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
         <button class="tab" role="tab" id="t-returns" aria-controls="p-returns" data-tab="returns">Returns</button>
         <button class="tab" role="tab" id="t-pickups" aria-controls="p-pickups" data-tab="pickups">Pickups</button>
         <button class="tab" role="tab" id="t-costs" aria-controls="p-costs" data-tab="costs">Costs</button>
+        <button class="tab" role="tab" id="t-bills" aria-controls="p-bills" data-tab="bills">Bills<span class="count" id="bill-count"></span></button>
         <span class="tab-ind" id="tab-ind" aria-hidden="true"></span>
       </nav>
     </div>
@@ -532,13 +537,58 @@ tbody tr.in { animation: rowin var(--dur-long) var(--ease-out) both; }
       </section>
     </section>
 
+    <!-- BILLS -->
+    <section class="panel-tab" id="p-bills" role="tabpanel" aria-labelledby="t-bills" hidden>
+      <div class="figs" id="bill-figs"></div>
+      <section class="sec">
+        <div class="sec-head"><h2>What to release and what to hold</h2><p id="bill-say"></p></div>
+        <div class="table-wrap"><table id="bill-table"></table></div>
+        <div class="keys" id="k-bill"></div>
+        <p class="note" id="bill-note"></p>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h2>Month by month</h2><p>By the month the parcel was handed over. Rs, before GST.</p></div>
+        <div class="filters"><div class="seg" role="group" aria-label="Courier" id="bf-c"><span class="seg-ind" aria-hidden="true"></span><button type="button" data-v="all">All couriers</button><button type="button" data-v="QWQER">QWQER</button><button type="button" data-v="PostEx">PostEx</button><button type="button" data-v="Leopards">Leopards</button></div></div>
+        <div class="table-wrap"><table id="bill-month"></table></div>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h2>PostEx rate questions</h2><p>Held until the contract is checked, not claimed yet. They overlap: a Lahore parcel also carries the 24%.</p></div>
+        <div class="table-wrap"><table id="bill-px"></table></div>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h2>Parcels to claim or confirm</h2><p id="bl-say"></p></div>
+        <div class="filters">
+          <div class="seg" role="group" aria-label="Kind" id="bl-k"><span class="seg-ind" aria-hidden="true"></span><button type="button" data-v="claim">Weight claims</button><button type="button" data-v="bulky">Bulky, to confirm</button></div>
+          <div class="seg" role="group" aria-label="Courier" id="bl-c"><span class="seg-ind" aria-hidden="true"></span><button type="button" data-v="all">All couriers</button><button type="button" data-v="QWQER">QWQER</button><button type="button" data-v="PostEx">PostEx</button><button type="button" data-v="Leopards">Leopards</button></div>
+          <label class="visually-hidden" for="bl-q">Search order, tracking, city or item</label>
+          <input class="input" id="bl-q" type="search" placeholder="Order, tracking, city or item">
+          <button class="btn btn-secondary" id="bl-csv" type="button">Download CSV</button>
+        </div>
+        <div class="table-wrap"><table id="bill-lines"></table></div>
+        <button class="btn btn-quiet more" id="bl-more" type="button" hidden>Show 50 more</button>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h2>Product weights to fix in Shopify</h2><p id="fx-say"></p></div>
+        <div class="filters">
+          <div class="seg" role="group" aria-label="Shopify weight" id="fx-s"><span class="seg-ind" aria-hidden="true"></span><button type="button" data-v="missing">Missing</button><button type="button" data-v="off">Looks wrong</button><button type="button" data-v="all">All</button></div>
+          <button class="btn btn-secondary" id="fx-csv" type="button">Download CSV</button>
+        </div>
+        <div class="table-wrap"><table id="bill-fix"></table></div>
+        <button class="btn btn-quiet more" id="fx-more" type="button" hidden>Show 50 more</button>
+      </section>
+      <details class="guide">
+        <summary>How the bill check works</summary>
+        <dl class="guide-list" id="bill-how"></dl>
+      </details>
+    </section>
+
     <div class="fail" id="fail" hidden></div>
   </main>
 
   <footer class="container foot">
     <div class="foot-row">
       <p id="foot-fresh"></p>
-      <p>Sources: Shopify fulfilments, courier tracking where connected, courier invoices for costs.</p>
+      <p>Sources: Shopify fulfilments and product weights, courier tracking and charges where connected, courier invoices for costs.</p>
     </div>
   </footer>
 </div>
