@@ -12,7 +12,7 @@ def export_weights(run_composio_tool, since):
   orders(query: "created_at:>=%s") {
     edges { node {
       id name
-      lineItems { edges { node { sku currentQuantity quantity
+      lineItems { edges { node { sku title variantTitle currentQuantity quantity
         variant { inventoryItem { measurement { weight { unit value } } } } } } }
     } }
   }
@@ -30,7 +30,7 @@ def export_weights(run_composio_tool, since):
         kg = (w.get("value") or 0) * UNIT.get(w.get("unit"), 0.001)
         qty = o.get("currentQuantity")
         qty = o.get("quantity") if qty is None else qty
-        rows.append(dict(oid=o["__parentId"], sku=o.get("sku"), qty=qty or 0, kg=kg))
+        rows.append(dict(oid=o["__parentId"], sku=o.get("sku"), title=o.get("title"), size=o.get("variantTitle"), qty=qty or 0, kg=kg))
     li = pd.DataFrame(rows)
     li["name"] = li.oid.map(names)
     li["line_kg"] = li.qty * li.kg
