@@ -98,6 +98,7 @@ def hand_rows(f, now):
         if len(a):
             row["fa"] = int(((r.st == "delivered") & (r.att <= 1)).sum())
             row["att_n"] = int(len(a))
+            row["fad"] = int(((r.st == "delivered") & r.att.notna()).sum())
         out.append(row)
     return out
 
