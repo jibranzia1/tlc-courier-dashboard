@@ -74,11 +74,13 @@ def parcel_frame(d, now, cx=None):
         f.loc[hit, "reason"] = c.loc[t, "reason"].values
         f.loc[hit, "src"] = "courier"
         f.loc[hit, "last"] = c.loc[t, "last"].values
-        dd = c.loc[t, "delivered_at"].values
-        ok = pd.notna(dd)
-        idx = f.index[hit][ok]
-        f.loc[idx, "days"] = (pd.to_datetime(dd[ok], utc=True).tz_convert("Asia/Karachi").normalize() - f.loc[idx, "hd"]).days
-        f.loc[f.st == "delivered", "dl"] = True
+        dd = pd.Series(c.loc[t, "delivered_at"].values, index=f.index[hit])
+        dd = pd.to_datetime(dd, utc=True, errors="coerce").dt.tz_convert("Asia/Karachi").dt.normalize()
+        ok = dd.notna()
+        f.loc[ok[ok].index, "days"] = (dd[ok] - f.loc[ok[ok].index, "hd"]).dt.days
+        # a parcel the courier has not delivered is not delivered, whatever Shopify says
+        f.loc[f.index[hit][(c.loc[t, "status"].values != "delivered")], "days"] = np.nan
+        f["dl"] = f.st.eq("delivered")
     return f
 
 
