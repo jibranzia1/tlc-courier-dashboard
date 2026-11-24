@@ -65,6 +65,7 @@ def parcel_frame(d, now, cx=None):
     f["cxl"] = f.f_disp.eq("CANCELED")
     f["st"] = np.where(f.dl, "delivered", np.where(f.cxl, "cancelled", "open"))
     f["att"] = np.nan; f["reason"] = None; f["src"] = "shopify"; f["last"] = None
+    f["dat"] = f.f_delivered; f["pat"] = pd.NaT
     if cx is not None and len(cx):
         c = cx.set_index("tracking")
         hit = f.tracking.isin(c.index)
@@ -74,6 +75,9 @@ def parcel_frame(d, now, cx=None):
         f.loc[hit, "reason"] = c.loc[t, "reason"].values
         f.loc[hit, "src"] = "courier"
         f.loc[hit, "last"] = c.loc[t, "last"].values
+        tz = lambda v: pd.to_datetime(pd.Series(v, index=f.index[hit]), utc=True, errors="coerce").dt.tz_convert("Asia/Karachi")
+        f.loc[hit, "dat"] = tz(c.loc[t, "delivered_at"].values)
+        f.loc[hit, "pat"] = tz(c.loc[t, "picked_at"].values) if "picked_at" in c.columns else pd.NaT
         dd = pd.Series(c.loc[t, "delivered_at"].values, index=f.index[hit])
         dd = pd.to_datetime(dd, utc=True, errors="coerce").dt.tz_convert("Asia/Karachi").dt.normalize()
         ok = dd.notna()
@@ -83,6 +87,27 @@ def parcel_frame(d, now, cx=None):
         f["dl"] = f.st.eq("delivered")
     # a fulfilment cancelled in Shopify is cancelled, even if the courier booking was never cancelled
     f.loc[f.f_disp.eq("CANCELED") & ~f.st.isin(["delivered", "returned", "returning"]), "st"] = "cancelled"
+    return promise(f, now)
+
+
+def promise(f, now):
+    """The delivery promise: QWQER parcels on the 9 AM pickup are delivered the same day;
+    every 7 PM pickup (QWQER, PostEx, Leopards) is delivered within 24 hours, by 7 PM the next day.
+    The clock starts at the courier's pickup scan (scans before 5 AM belong to the previous evening's pickup);
+    without a scan it starts at the 7 PM pickup on the handover day."""
+    pat = pd.to_datetime(f.pat, errors="coerce")
+    if getattr(pat.dt, "tz", None) is None: pat = pat.dt.tz_localize("Asia/Karachi")
+    has = pat.notna()
+    day = f.hd.copy()
+    day[has] = (pat[has] - pd.Timedelta(hours=5)).dt.normalize()
+    am = has & f.cour.eq("QWQER") & pat.dt.hour.between(6, 14)
+    f["batch"] = np.where(am, "am9", "pm7")
+    f["due"] = (day + pd.Timedelta(days=1, hours=19)).where(~am, day + pd.Timedelta(hours=23, minutes=59, seconds=59))
+    dat = pd.to_datetime(f.dat, errors="coerce")
+    if getattr(dat.dt, "tz", None) is None: dat = dat.dt.tz_localize("Asia/Karachi")
+    f["ontime"] = f.st.eq("delivered") & dat.notna() & (dat <= f.due)
+    # judged: delivered, or still out after its promise passed (returns and cancellations are not judged)
+    f["judged"] = f.st.eq("delivered") | (f.st.isin(["open", "in_transit", "awaiting_pickup"]) & (f.due < now))
     return f
 
 
@@ -99,7 +124,9 @@ def hand_rows(f, now):
                    cdl=int(((r.st == "delivered") & (r.src == "courier")).sum()),
                    sd=int(days.size), sum=int(days.sum()),
                    b=[int((days == k).sum()) for k in range(5)] + [int((days >= 5).sum())],
-                   src=int((r.src == "courier").sum()))
+                   src=int((r.src == "courier").sum()),
+                   pn=int(r.judged.sum()), po=int(r.ontime.sum()),
+                   am=int((r.batch == "am9").sum()), amo=int(((r.batch == "am9") & r.ontime).sum()), amn=int(((r.batch == "am9") & r.judged).sum()))
         a = r.att.dropna()
         if len(a):
             row["fa"] = int(((r.st == "delivered") & (r.att <= 1)).sum())
@@ -123,12 +150,14 @@ def open_rows(f, now):
     end = now.normalize()
     r = f[f.st.isin(["open", "in_transit", "returning", "awaiting_pickup"]) & (f.f_created >= end - pd.Timedelta(days=60))].copy()
     r["age"] = (end - r.hd).dt.days
+    r["over"] = np.ceil((now - r.due).dt.total_seconds() / 86400).clip(lower=0).astype(int)
     r = r.sort_values("age", ascending=False)
     S = lambda v: v if isinstance(v, str) else ""
     return [dict(o=x.name, c=x.cour, t=S(x.tracking), city=S(x.city).strip().title(), g=x.g,
                  d=x.hd.strftime("%Y-%m-%d"), age=int(x.age),
                  s=S(x.f_disp).replace("_", " ").capitalize() if x.src == "shopify" else (S(x.last) or x.st.replace("_", " ").capitalize()),
-                 st=x.st, att=None if pd.isna(x.att) else int(x.att), why=x.reason if isinstance(x.reason, str) else None, src=x.src)
+                 st=x.st, att=None if pd.isna(x.att) else int(x.att), why=x.reason if isinstance(x.reason, str) else None, src=x.src,
+                 due=x.due.strftime("%Y-%m-%d %H:%M"), over=int(x.over), b=x.batch)
             for x in r.itertuples(index=False)]
 
 
@@ -136,7 +165,7 @@ def build_v2(d, now, cx=None, live_couriers=None):
     """Everything the app filters client-side. Open parcels are packed as arrays to keep the file small."""
     f = parcel_frame(d, now, cx)
     o = open_rows(f, now)
-    keys = ["o", "c", "t", "city", "g", "d", "age", "s", "st", "att", "why", "src"]
+    keys = ["o", "c", "t", "city", "g", "d", "age", "s", "st", "att", "why", "src", "due", "over", "b"]
     return dict(
         v=2,
         app=[dict(hist_start=HIST_START.strftime("%Y-%m-%d"), track_start="2026-08-01",

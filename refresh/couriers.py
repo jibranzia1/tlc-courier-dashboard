@@ -271,7 +271,7 @@ def reason_group(text):
 
 def cx_frame(cache):
     import pandas as pd
-    if not cache: return pd.DataFrame(columns=["tracking", "status", "attempts", "reason", "delivered_at", "last"])
+    if not cache: return pd.DataFrame(columns=["tracking", "status", "attempts", "reason", "delivered_at", "picked_at", "last"])
     return pd.DataFrame([dict(tracking=t, status=r["status"], attempts=r.get("attempts"), reason=reason_group(r.get("reason")), delivered_at=r.get("delivered_at"),
-                              last=r.get("last") or r.get("raw_status"))
+                              picked_at=r.get("picked_at"), last=r.get("last") or r.get("raw_status"))
                          for t, r in cache.items()])

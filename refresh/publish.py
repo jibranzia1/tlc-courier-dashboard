@@ -105,7 +105,8 @@ if keys:
 _gh_put("data.enc.json", json.dumps(enc), "Data refresh " + stamp)
 
 open_n = len(v2["open"])
-late = sum(1 for o in v2["open"] if o[8] != "returning" and o[6] > (1 if o[1] == "QWQER" else 2 if o[4] == "Lahore" else 4 if o[4] == "Other cities" else 3) and o[6] <= 14)
+K = {k: i for i, k in enumerate(v2["open_keys"])}
+late = sum(1 for o in v2["open"] if o[K["st"]] != "returning" and o[K["over"]] > 0 and o[K["age"]] <= 14)
 print(json.dumps({"ok": True, "refreshed": stamp, "site": "https://%s.github.io/%s/" % (OWNER, REPO),
                   "days": len(v2["daily"]), "open_parcels": open_n, "late_14d": late,
                   "couriers_live": live, "cx_cached": len(cache), "seconds": round(time.time() - T0)}))
