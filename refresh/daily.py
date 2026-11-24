@@ -81,6 +81,8 @@ def parcel_frame(d, now, cx=None):
         # a parcel the courier has not delivered is not delivered, whatever Shopify says
         f.loc[f.index[hit][(c.loc[t, "status"].values != "delivered")], "days"] = np.nan
         f["dl"] = f.st.eq("delivered")
+    # a fulfilment cancelled in Shopify is cancelled, even if the courier booking was never cancelled
+    f.loc[f.f_disp.eq("CANCELED") & ~f.st.isin(["delivered", "returned", "returning"]), "st"] = "cancelled"
     return f
 
 
