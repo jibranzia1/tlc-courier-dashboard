@@ -76,16 +76,17 @@ def qwqer_one(key, tracking):
     j = r.json()
     d = j.get("data") or {}
     st = QW_STATUS.get(d.get("status"), classify(d.get("status_text")))
-    tl = j.get("timeline") or []
-    delivered = None
-    for e in tl:
-        if str(e.get("status", "")).strip().lower() == "delivered":
-            delivered = _qw_time(e.get("created_at", "")) or delivered
-    reason = d.get("undelivered_reason") or d.get("cancellation_reason") or d.get("refund_reason")
+    if d.get("status") == 1: st = "awaiting_pickup"
+    tl = [e for e in (j.get("timeline") or []) if str(e.get("status", "")).strip().lower() not in ("invoice generated", "weight updated")]
+    when = lambda name: [_qw_time(e.get("created_at", "")) for e in tl if str(e.get("status", "")).strip().lower() == name]
+    dl = when("delivered"); pk = when("picked up")
     att = d.get("attempt_count")
-    if att is not None and st == "delivered": att = max(1, int(att))
-    return dict(status=st, attempts=None if att is None else int(att), reason=reason, delivered_at=_iso(delivered),
-                raw_status=d.get("status_text"))
+    n_att = len(when("attempted"))
+    att = max(int(att or 0), n_att + (1 if st == "delivered" else 0))
+    comments = [str(c.get("comment") or "").strip() for c in (j.get("comments_data") or []) if c.get("comment")]
+    reason = d.get("undelivered_reason") or d.get("cancellation_reason") or (comments[-1] if comments and st != "delivered" else None)
+    return dict(status=st, attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(dl[-1] if dl else None),
+                picked_at=_iso(pk[0] if pk else None), last=str(tl[-1].get("status")) if tl else d.get("status_text"), raw_status=d.get("status_text"))
 
 
 def qwqer(key, trackings, budget=100):
@@ -167,24 +168,32 @@ def _lp_time(s):
 
 
 def leopards_batch(key, pw, batch):
-    r = requests.post(LP_BASE + "trackBookedPacket/format/json/", data={"api_key": key, "api_password": pw, "track_numbers": ",".join(batch)}, timeout=40)
+    r = requests.post(LP_BASE + "trackBookedPacket/format/json/", data={"api_key": key, "api_password": pw, "track_numbers": ",".join(batch)}, timeout=60)
     r.raise_for_status()
     j = r.json() or {}
+    if str(j.get("status")) != "1":
+        raise RuntimeError("Leopards: " + str(j.get("error"))[:120])
     out = {}
     for p in j.get("packet_list") or []:
-        cn = str(p.get("track_number") or p.get("booked_packet_cn") or "")
-        st = classify(p.get("booked_packet_status"))
-        det = p.get("Tracking Detail") or p.get("tracking_detail") or []
-        delivered = None
-        if st == "delivered":
-            for e in det:
-                if classify(e.get("Status")) == "delivered":
-                    delivered = _lp_time(e.get("Activity_datetime") or e.get("Activity_Date"))
-        att = sum(1 for e in det if "attempt" in str(e.get("Status", "")).lower() or e.get("Reason")) or None
-        if st == "delivered": att = (att or 0) + 1
-        reasons = [e.get("Reason") for e in det if e.get("Reason")]
-        out[cn] = dict(status=st, attempts=att, reason=reasons[-1] if reasons else None, delivered_at=_iso(delivered),
-                       raw_status=p.get("booked_packet_status"))
+        cn = str(p.get("track_number") or "")
+        bs = str(p.get("booked_packet_status") or "").strip(); bl = bs.lower()
+        det = p.get("Tracking Detail") or []
+        evs = [(str(e.get("Status") or "").strip(), (e.get("Reason") or None), _lp_time(e.get("Activity_datetime"))) for e in det]
+        if bl == "delivered": st = "delivered"
+        elif "returned to shipper" in bl or any(x.lower().startswith("return to sender") for x, _, _ in evs) and "deliver" not in bl: st = "returned"
+        elif "return" in bl: st = "returning"
+        elif "cancel" in bl: st = "cancelled"
+        elif "pickup request not send" in bl or "booked" == bl: st = "awaiting_pickup"
+        else: st = classify(bs)
+        pend = [rs for x, rs, _ in evs if x.lower().startswith("pending") and rs]
+        rfr = [rs or x.split("-", 1)[-1].strip() for x, rs, _ in evs if x.lower().startswith("ready for return")]
+        att = len(pend) + (1 if st == "delivered" else 0) + (1 if rfr and not pend else 0)
+        reason = (rfr[-1] if rfr else pend[-1] if pend else None) if st != "delivered" else None
+        dl = [t for x, _, t in evs if x.lower() == "delivered"]
+        pk = [t for x, _, t in evs if x.lower().startswith("shipment picked")]
+        last = evs[-1][0] + (" - " + evs[-1][1] if evs[-1][1] and evs[-1][0].lower().startswith("pending") else "") if evs else bs
+        out[cn] = dict(status=st, attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(dl[-1] if dl else None),
+                       picked_at=_iso(pk[0] if pk else None), last=re.sub(r"\s+", " ", last), raw_status=bs)
     return out
 
 
@@ -233,11 +242,14 @@ def refresh_cx(parcels, keys, cache, budget=110):
 
 
 REASONS = [
-    ("Refused at the door", ("refus", "not accept", "denied", "reject", "cancelled by customer", "customer cancel", "don't want", "dont want", "not required", "no longer")),
+    ("Fake or duplicate order", ("fake", "duplicate", "not ordered", "did not order", "didn't order")),
+    ("Product issue", ("quality", "different", "damaged", "wrong item", "size")),
+    ("Courier delay or capacity", ("delayed delivery", "delay", "excess load", "time constraint", "late delivery")),
+    ("Refused at the door", ("refus", "not accept", "denied", "reject", "cancelled by customer", "customer cancel", "cancel by customer", "don't want", "dont want", "not required", "no longer")),
     ("Wanted to open the parcel", ("open", "check the parcel", "inspection")),
+    ("Address problem", ("address", "location", "incomplete", "wrong", "out of service", "non service", "area", "not found", "house", "flat", "block", "sector", "locate", "out of city parcel")),
     ("Asked to deliver later", ("later", "reschedul", "next day", "postpone", "out of city", "out of town", "hold on")),
-    ("Customer not reachable", ("not respond", "unreachable", "not reachable", "no answer", "not answer", "phone off", "switched off", "powered off", "not picking", "contact", "not available", "unavailable", "not at home", "call")),
-    ("Address problem", ("address", "location", "incomplete", "wrong", "out of service", "non service", "area", "not found")),
+    ("Customer not reachable", ("not respond", "unreachable", "not reachable", "no answer", "not answer", "phone off", "switched off", "powered off", "not picking", "contact", "not available", "unavailable", "not at home", "not came", "closed", "call")),
     ("Payment not ready", ("cash", "amount", "payment", "money")),
 ]
 
@@ -245,6 +257,8 @@ REASONS = [
 def reason_group(text):
     t = (text or "").strip().lower()
     if not t: return None
+    for label, _ in REASONS:
+        if t == label.lower(): return label
     for label, words in REASONS:
         if any(w in t for w in words): return label
     return "Other"
