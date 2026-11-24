@@ -198,12 +198,11 @@ def leopards_batch(key, pw, batch):
 
 
 def leopards(key, pw, trackings, budget=100):
-    batches = [trackings[i:i + 50] for i in range(0, len(trackings), 50)]
-    res, t0 = {}, time.time()
-    for b in batches:
-        if time.time() - t0 > budget: break
-        try: res.update(leopards_batch(key, pw, b))
-        except Exception: pass
+    """Leopards answers slowly (about 1 s per parcel per call), so ask in small batches, several at once."""
+    batches = [tuple(trackings[i:i + 10]) for i in range(0, len(trackings), 10)]
+    got = _pool(lambda b: leopards_batch(key, pw, list(b)), batches, 8, budget)
+    res = {}
+    for v in got.values(): res.update(v)
     return res
 
 
@@ -227,11 +226,15 @@ def refresh_cx(parcels, keys, cache, budget=110):
     if keys.get("postex_token") and todo.get("PostEx"): jobs.append(("PostEx", lambda b: postex(keys["postex_token"], todo["PostEx"], b)))
     if keys.get("leopards_key") and keys.get("leopards_password") and todo.get("Leopards"):
         jobs.append(("Leopards", lambda b: leopards(keys["leopards_key"], keys["leopards_password"], todo["Leopards"], b)))
-    for i, (c, fn) in enumerate(jobs):
-        left = budget - (time.time() - t0)
-        if left < 10: break
-        got = fn(left / (len(jobs) - i))
-        now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    # the couriers are asked in parallel, each with the whole time budget
+    def run(job):
+        c, fn = job
+        try: return c, fn(budget)
+        except Exception: return c, {}
+    with ThreadPoolExecutor(max(1, len(jobs))) as ex:
+        results = list(ex.map(run, jobs))
+    now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    for c, got in results:
         for t, r in got.items():
             r["courier"] = c; r["checked"] = now_iso
             cache[t] = r
