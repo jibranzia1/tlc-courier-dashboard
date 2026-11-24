@@ -137,11 +137,11 @@
 
   // ---------- aggregation ----------
   const within = (r, f, t) => r.d >= f && r.d <= t;
-  function zero() { return { n: 0, cx: 0, src: 0, sn: 0, scx: 0, sdl: 0, sret: 0, ssrc: 0, sd: 0, sum: 0, b: [0, 0, 0, 0, 0, 0], fa: 0, fad: 0 }; }
+  function zero() { return { n: 0, cx: 0, src: 0, sn: 0, scx: 0, sdl: 0, scdl: 0, sret: 0, ssrc: 0, sd: 0, sum: 0, b: [0, 0, 0, 0, 0, 0], fa: 0, fad: 0 }; }
   function addRow(o, r, settled) {
     o.n += r.n; o.cx += r.cx; o.src += r.src || 0;
     if (!settled) return;
-    o.sn += r.n; o.scx += r.cx; o.sdl += r.dl; o.sret += (r.ret || 0) + (r.rtn || 0); o.ssrc += r.src || 0;
+    o.sn += r.n; o.scx += r.cx; o.sdl += r.dl; o.scdl += r.cdl || 0; o.sret += (r.ret || 0) + (r.rtn || 0); o.ssrc += r.src || 0;
     o.sd += r.sd; o.sum += r.sum; r.b.forEach((v, i) => { o.b[i] += v; });
     o.fa += r.fa || 0; o.fad += r.fad || 0;
   }
@@ -150,7 +150,7 @@
     o.same = o.sd ? o.b[0] / o.sd : null;
     o.avg = o.sd ? o.sum / o.sd : null;
     o.g5 = o.sd ? o.b[5] / o.sd : null;
-    const out = o.sdl + o.sret;
+    const out = o.scdl + o.sret;
     o.rr = c && live(c) && o.ssrc && out ? o.sret / out : null;
     o.far = o.fad ? o.fa / o.fad : null;
     return o;
@@ -578,13 +578,13 @@
     if (anyLive()) {
       const pl = p ? prevLabel(a) : '';
       figs($('ret-figs'), [
-        ...CS.map((c) => ({ label: c + ', return rate', value: a.by[c].rr == null ? null : a.by[c].rr * 100, fmt: (v) => v.toFixed(1), unit: '%', sub: live(c) ? fInt(a.by[c].sret) + ' returned of ' + fInt(a.by[c].sret + a.by[c].sdl) : 'Not connected', delta: p && live(c) && delta(a.by[c].rr, p.by[c].rr, 'pts', false, pl) })),
+        ...CS.map((c) => ({ label: c + ', return rate', value: a.by[c].rr == null ? null : a.by[c].rr * 100, fmt: (v) => v.toFixed(1), unit: '%', sub: live(c) ? fInt(a.by[c].sret) + ' returned of ' + fInt(a.by[c].sret + a.by[c].scdl) : 'Not connected', delta: p && live(c) && delta(a.by[c].rr, p.by[c].rr, 'pts', false, pl) })),
         { label: 'Delivered on the first attempt', value: a.all.far == null ? null : a.all.far * 100, fmt: (v) => Math.round(v), unit: '%', sub: 'Connected couriers only' },
       ]);
       ckeys($('k-ret'), CS.filter(live));
       const rs = series(hi(a.f, A.track_start), lo(a.t, add(MAX, -5)), (k, rows) => {
         const o = { k };
-        CS.filter(live).forEach((c) => { const r = rows.filter((x) => x.c === c && x.src), out = d3.sum(r, (x) => x.dl + x.ret + x.rtn), ret = d3.sum(r, (x) => x.ret + x.rtn); o[c] = out >= 20 ? ret / out : null; o['n_' + c] = out; });
+        CS.filter(live).forEach((c) => { const r = rows.filter((x) => x.c === c && x.src), out = d3.sum(r, (x) => (x.cdl || 0) + x.ret + x.rtn), ret = d3.sum(r, (x) => x.ret + x.rtn); o[c] = out >= 20 ? ret / out : null; o['n_' + c] = out; });
         return o;
       });
       lineChart($('ch-ret'), rs.rows, CS.filter(live), { aria: 'Return rate by courier over time', label: rs.bk.label, domain: [0, 0.3], tipv: (q) => fPct1(q.v) + ' of ' + fInt(q.n) + ' parcels' });

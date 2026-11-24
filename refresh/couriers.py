@@ -96,31 +96,51 @@ def qwqer(key, trackings, budget=100):
 PX_BASE = "https://api.postex.pk/services/integration/api/order/"
 
 
-def _px_time(s):
+def _ts(s):
+    """ISO time with a +0500 style offset -> aware datetime."""
     if not s: return None
-    for f in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%d-%m-%Y %H:%M:%S"):
-        try: return dt.datetime.strptime(str(s)[:26], f).replace(tzinfo=PKT)
-        except Exception: pass
-    return None
+    t = re.sub(r"([+-]\d\d)(\d\d)$", r"\1:\2", str(s).strip())
+    try:
+        x = dt.datetime.fromisoformat(t)
+        return x if x.tzinfo else x.replace(tzinfo=PKT)
+    except Exception:
+        return None
+
+
+PX_CODES = {"RFD": "Refused at the door", "CNA": "Customer not reachable", "OPN": "Wanted to open the parcel", "ICA": "Address problem",
+            "HCR": "Asked to deliver later", "PNA": "Payment not ready"}
 
 
 def _px_record(d):
     hist = d.get("transactionStatusHistory") or []
-    msgs = [str(h.get("transactionStatusMessage") or "") for h in hist]
-    st = classify(d.get("transactionStatus") or (msgs[-1] if msgs else ""))
-    delivered = None
-    if st == "delivered":
+    code = lambda h: str(h.get("transactionStatusMessageCode") or "")
+    msg = lambda h: str(h.get("transactionStatusMessage") or "").strip()
+    ts = str(d.get("transactionStatus") or "").strip()
+    tl = ts.lower()
+    codes = [code(h) for h in hist]
+    if tl == "delivered" or "0005" in codes and not any(c in ("0039", "0040", "0006") for c in codes): st = "delivered"
+    elif tl == "returned" or "0006" in codes: st = "returned"
+    elif "unbooked" in tl: st = "awaiting_pickup"
+    elif "un-assigned" in tl or "cancel" in tl or (codes and codes[-1] == "0002"): st = "cancelled"
+    elif "return" in tl or any(c in ("0039", "0040", "0037", "0032") for c in codes): st = "returning"
+    else: st = "in_transit"
+    attempts = [msg(h) for h in hist if code(h) == "0013" and msg(h).lower().startswith("attempt")]
+    att = len(attempts) + (1 if st == "delivered" else 0)
+    reason = None
+    if attempts:
+        m = re.search(r"attempt made:\s*([A-Z]{3})", attempts[-1], re.I)
+        reason = PX_CODES.get(m.group(1).upper(), attempts[-1]) if m else attempts[-1]
+    delivered = _ts(d.get("orderDeliveryDate")) if st == "delivered" else None
+    if st == "delivered" and not delivered:
         for h in hist:
-            if classify(h.get("transactionStatusMessage")) == "delivered":
-                delivered = _px_time(h.get("updatedAt") or h.get("modifiedDatetime"))
-        delivered = delivered or _px_time(d.get("transactionDate") or d.get("updatedAt"))
-    att = sum(1 for m in msgs if "attempt" in m.lower()) or None
-    if st == "delivered": att = (att or 0) + 1
-    reason = d.get("reversalReason") or d.get("returnReason") or d.get("transactionNotes")
-    if not reason:
-        bad = [m for m in msgs if "attempt" in m.lower() or "refus" in m.lower() or "return" in m.lower()]
-        reason = bad[-1] if bad else None
-    return dict(status=st, attempts=att, reason=reason, delivered_at=_iso(delivered), raw_status=d.get("transactionStatus"))
+            if code(h) == "0005": delivered = _ts(h.get("updatedAt"))
+    picked = _ts(d.get("orderPickupDate"))
+    if not picked:
+        for h in hist:
+            if code(h) == "0031": picked = _ts(h.get("updatedAt")); break
+    last = msg(hist[-1]) if hist else ts
+    return dict(status=st, attempts=att if (att or st in FINAL) else None, reason=reason, delivered_at=_iso(delivered),
+                picked_at=_iso(picked), last=last, raw_status=ts)
 
 
 def postex_one(token, tracking):
@@ -184,7 +204,7 @@ def refresh_cx(parcels, keys, cache, budget=110):
     Returns (cache, live) where live says which couriers answered this run."""
     import pandas as pd
     now = pd.Timestamp.now(tz="Asia/Karachi")
-    p = parcels[parcels.tracking.notna() & (parcels.f_created >= now - pd.Timedelta(days=120))]
+    p = parcels[parcels.tracking.notna()]
     todo = {}
     for c, g in p.groupby("cour"):
         ts = [t for t in g.sort_values("f_created", ascending=False).tracking.astype(str).unique()
@@ -215,9 +235,9 @@ def refresh_cx(parcels, keys, cache, budget=110):
 REASONS = [
     ("Refused at the door", ("refus", "not accept", "denied", "reject", "cancelled by customer", "customer cancel", "don't want", "dont want", "not required", "no longer")),
     ("Wanted to open the parcel", ("open", "check the parcel", "inspection")),
-    ("Customer not reachable", ("not respond", "unreachable", "not reachable", "no answer", "not answer", "phone off", "switched off", "powered off", "not picking", "contact", "not available", "unavailable", "not at home", "hold", "call")),
+    ("Asked to deliver later", ("later", "reschedul", "next day", "postpone", "out of city", "out of town", "hold on")),
+    ("Customer not reachable", ("not respond", "unreachable", "not reachable", "no answer", "not answer", "phone off", "switched off", "powered off", "not picking", "contact", "not available", "unavailable", "not at home", "call")),
     ("Address problem", ("address", "location", "incomplete", "wrong", "out of service", "non service", "area", "not found")),
-    ("Asked to deliver later", ("later", "reschedul", "next day", "postpone", "out of city", "out of town")),
     ("Payment not ready", ("cash", "amount", "payment", "money")),
 ]
 
@@ -232,6 +252,7 @@ def reason_group(text):
 
 def cx_frame(cache):
     import pandas as pd
-    if not cache: return pd.DataFrame(columns=["tracking", "status", "attempts", "reason", "delivered_at"])
-    return pd.DataFrame([dict(tracking=t, status=r["status"], attempts=r.get("attempts"), reason=reason_group(r.get("reason")), delivered_at=r.get("delivered_at"))
+    if not cache: return pd.DataFrame(columns=["tracking", "status", "attempts", "reason", "delivered_at", "last"])
+    return pd.DataFrame([dict(tracking=t, status=r["status"], attempts=r.get("attempts"), reason=reason_group(r.get("reason")), delivered_at=r.get("delivered_at"),
+                              last=r.get("last") or r.get("raw_status"))
                          for t, r in cache.items()])

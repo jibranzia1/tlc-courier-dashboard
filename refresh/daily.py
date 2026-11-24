@@ -64,7 +64,7 @@ def parcel_frame(d, now, cx=None):
     f["days"] = (f.f_delivered.dt.normalize() - f.hd).dt.days
     f["cxl"] = f.f_disp.eq("CANCELED")
     f["st"] = np.where(f.dl, "delivered", np.where(f.cxl, "cancelled", "open"))
-    f["att"] = np.nan; f["reason"] = None; f["src"] = "shopify"
+    f["att"] = np.nan; f["reason"] = None; f["src"] = "shopify"; f["last"] = None
     if cx is not None and len(cx):
         c = cx.set_index("tracking")
         hit = f.tracking.isin(c.index)
@@ -73,6 +73,7 @@ def parcel_frame(d, now, cx=None):
         f.loc[hit, "att"] = c.loc[t, "attempts"].values
         f.loc[hit, "reason"] = c.loc[t, "reason"].values
         f.loc[hit, "src"] = "courier"
+        f.loc[hit, "last"] = c.loc[t, "last"].values
         dd = c.loc[t, "delivered_at"].values
         ok = pd.notna(dd)
         idx = f.index[hit][ok]
@@ -90,7 +91,8 @@ def hand_rows(f, now):
         days = dl.days.dropna().clip(lower=0)
         row = dict(d=hd.strftime("%Y-%m-%d"), c=c, g=cg, n=int(len(r)),
                    dl=int(len(dl)), ret=int((r.st == "returned").sum()), rtn=int((r.st == "returning").sum()),
-                   cx=int((r.st == "cancelled").sum()), op=int(r.st.isin(["open", "in_transit"]).sum()),
+                   cx=int((r.st == "cancelled").sum()), op=int(r.st.isin(["open", "in_transit", "awaiting_pickup"]).sum()),
+                   cdl=int(((r.st == "delivered") & (r.src == "courier")).sum()),
                    sd=int(days.size), sum=int(days.sum()),
                    b=[int((days == k).sum()) for k in range(5)] + [int((days >= 5).sum())],
                    src=int((r.src == "courier").sum()))
@@ -115,13 +117,13 @@ def reason_rows(f, now):
 def open_rows(f, now):
     """Parcels not yet delivered (or returning), handed over in the last 60 days. The page decides which are late."""
     end = now.normalize()
-    r = f[f.st.isin(["open", "in_transit", "returning"]) & (f.f_created >= end - pd.Timedelta(days=60))].copy()
+    r = f[f.st.isin(["open", "in_transit", "returning", "awaiting_pickup"]) & (f.f_created >= end - pd.Timedelta(days=60))].copy()
     r["age"] = (end - r.hd).dt.days
     r = r.sort_values("age", ascending=False)
     S = lambda v: v if isinstance(v, str) else ""
     return [dict(o=x.name, c=x.cour, t=S(x.tracking), city=S(x.city).strip().title(), g=x.g,
                  d=x.hd.strftime("%Y-%m-%d"), age=int(x.age),
-                 s=S(x.f_disp).replace("_", " ").capitalize() if x.src == "shopify" else x.st.replace("_", " ").capitalize(),
+                 s=S(x.f_disp).replace("_", " ").capitalize() if x.src == "shopify" else (S(x.last) or x.st.replace("_", " ").capitalize()),
                  st=x.st, att=None if pd.isna(x.att) else int(x.att), why=x.reason if isinstance(x.reason, str) else None, src=x.src)
             for x in r.itertuples(index=False)]
 
