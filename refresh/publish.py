@@ -90,6 +90,10 @@ if keys:
     budget = max(20, 150 - (time.time() - T0) - 25)
     cache, live = refresh_cx(pf, keys, cache, budget=budget)
 
+# a courier counts as connected when its tracking is in the cache, even if this run could not reach it
+for c in ("QWQER", "PostEx", "Leopards"):
+    live[c] = bool(live.get(c)) or any(r.get("courier") == c for r in cache.values())
+
 # 3. build, encrypt, commit
 v2 = build_v2(d, now, cx_frame(cache), live)
 payload = {**live_old, **v2, **{k: static[k] for k in STATIC_KEYS}}
